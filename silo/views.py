@@ -3,7 +3,7 @@ import urllib2
 import json
 import base64
 import csv
-import operator
+from operator import and_, or_
 from collections import OrderedDict
 from django.core.urlresolvers import reverse_lazy
 
@@ -25,6 +25,9 @@ from django.views.decorators.csrf import csrf_protect
 import django_tables2 as tables
 from django_tables2 import RequestConfig
 
+from oauth2client.django_orm import Storage
+from .models import GoogleCredentialsModel
+from google_views import *
 from .models import Silo, Read, ReadType, ThirdPartyTokens, LabelValueStore, Tag, UniqueFields, MergedSilosFieldMapping, TolaSites
 
 from .tables import define_table
@@ -104,12 +107,13 @@ def mergeTwoSilos(data, left_table_id, right_table_id):
             else:
                 merge_data_row[col] = ''
 
-        # Loop through all of the right_unmapped_cols for each row in left_table; however,
-        # the value is set to nothing b/c the left_table does not have any values for the
-        # columns in the right table. The right table is iterated over below.
+        # Loop through all of the right_unmapped_cols for each row in left_table.
         for col in right_unmapped_cols:
             unique_cols.add(col)
-            merge_data_row[col] = ''
+            if col in row.keys():
+                merge_data_row[col] = row[col]
+            else:
+                merge_data_row[col] = ''
 
         merge_data_row['left_table_id'] = left_table_id
         merge_data_row['right_table_id'] = right_table_id
@@ -360,7 +364,7 @@ def showRead(request, id):
     Show a read data source and allow user to edit it
     """
     initial = {'owner': request.user}
-    excluded_fields=('autopull', 'autopull_frequency', 'read_url')
+    excluded_fields=('autopush_frequency', 'autopull_frequency', 'read_url')
     try:
         read_instance = Read.objects.get(pk=id)
         if read_instance.type.read_type != "CSV":
@@ -372,15 +376,18 @@ def showRead(request, id):
     if request.method == 'POST':
         form = ReadForm(request.POST, request.FILES, instance=read_instance)
         if form.is_valid():
-            read = form.save()
-            if form.instance.type.read_type == "CSV":
-                return HttpResponseRedirect("/file/" + str(read.id) + "/")
-            return HttpResponseRedirect(reverse_lazy('listSilos'))
+            if form.instance.autopull_frequency:
+                messages.error(request, "You must first set a column in your table as a unique column in the table view page.")
+            elif form.instance.type.read_type == "CSV":
+                messages.warning(request, "A CSV source cannot be setup for auto-pull or auto-push")
+            else:
+                read = form.save()
+                #return HttpResponseRedirect("/file/" + str(read.id) + "/")
+                #return HttpResponseRedirect(reverse_lazy('listSilos'))
         else:
             messages.error(request, 'Invalid Form', fail_silently=False)
     else:
         form = ReadForm(exclude_list=excluded_fields, instance=read_instance, initial=initial)
-
     return render(request, 'read/read.html', {
         'form': form, 'read_id': id,
     })
@@ -628,7 +635,7 @@ def updateMergeSilo(request, pk):
     try:
         silo = Silo.objects.get(id=pk)
     except Silo.DoesNotExist as e:
-        return HttpResponse("Merged Table (%s) does not exist" % pk)
+        return HttpResponse("Table (%s) does not exist" % pk)
 
     try:
         mapping = MergedSilosFieldMapping.objects.get(merged_silo = silo.pk)
@@ -661,47 +668,71 @@ def updateMergeSilo(request, pk):
 
     except MergedSilosFieldMapping.DoesNotExist as e:
         # Check if the silo has a source from ONA: and if so, then update its data
-        read_type = ReadType.objects.get(read_type="JSON")
-        reads = silo.reads.filter(type=read_type.pk)
-        if not reads:
-            messages.info(request, "Tables that only have a CSV source cannot be updated.")
-        elif silo.unique_fields.all():
-            for read in reads:
-                ona_token = ThirdPartyTokens.objects.get(user=silo.owner.pk, name="ONA")
-                response = requests.get(read.read_url, headers={'Authorization': 'Token %s' % ona_token.token})
-                data = json.loads(response.content)
+        stop = False
 
-                # import data into this silo
-                num_rows = len(data)
-                if num_rows == 0:
-                    continue
 
-                counter = None
-                #loop over data and insert create and edit dates and append to dict
-                for counter, row in enumerate(data):
-                    skip_row = False
-                    #if the value of unique column is already in existing_silo_data then skip the row
-                    for unique_field in silo.unique_fields.all():
-                        filter_criteria = {'silo_id': silo.pk, unique_field.name: row[unique_field.name]}
-                        if LabelValueStore.objects.filter(**filter_criteria).count() > 0:
-                            skip_row = True
-                            continue
-                    if skip_row == True:
-                        continue
-                    # at this point, the unique column value is not in existing data so append it.
-                    lvs = LabelValueStore()
-                    lvs.silo_id = silo.pk
-                    for new_label, new_value in row.iteritems():
-                        if new_label is not "" and new_label is not None and new_label is not "edit_date" and new_label is not "create_date":
-                            setattr(lvs, new_label, new_value)
-                    lvs.create_date = timezone.now()
-                    result = lvs.save()
 
-                if num_rows == (counter+1):
-                    combineColumns(silo.pk)
-        else:
+        if silo.unique_fields.all().exists() == False:
+            stop = True
             messages.info(request, "In order to update a table, it must have a unique field set.")
 
+
+        read_type = ReadType.objects.get(read_type="JSON")
+        reads = silo.reads.filter(type=read_type.pk)
+        for read in reads:
+            ona_token = ThirdPartyTokens.objects.get(user=silo.owner.pk, name="ONA")
+            response = requests.get(read.read_url, headers={'Authorization': 'Token %s' % ona_token.token})
+            data = json.loads(response.content)
+
+            # import data into this silo
+            num_rows = len(data)
+            if num_rows == 0:
+                continue
+
+            counter = None
+            #loop over data and insert create and edit dates and append to dict
+            for counter, row in enumerate(data):
+                skip_row = False
+                #if the value of unique column is already in existing_silo_data then skip the row
+                for unique_field in silo.unique_fields.all():
+                    filter_criteria = {'silo_id': silo.pk, unique_field.name: row[unique_field.name]}
+                    if LabelValueStore.objects.filter(**filter_criteria).count() > 0:
+                        skip_row = True
+                        continue
+                if skip_row == True:
+                    continue
+                # at this point, the unique column value is not in existing data so append it.
+                lvs = LabelValueStore()
+                lvs.silo_id = silo.pk
+                for new_label, new_value in row.iteritems():
+                    if new_label is not "" and new_label is not None and new_label is not "edit_date" and new_label is not "create_date":
+                        setattr(lvs, new_label, new_value)
+                lvs.create_date = timezone.now()
+                result = lvs.save()
+
+            if num_rows == (counter+1):
+                combineColumns(silo.pk)
+        # reset num_rows
+        num_rows = 0
+        read_types = ReadType.objects.filter(Q(read_type="GSheet Import") | Q(read_type="Google Spreadsheet"))
+        reads = silo.reads.filter(reduce(or_, [Q(type=read.id) for read in read_types]))
+        for read in reads:
+            # get gsheet authorized client and the gsheet id to fetch its data into the silo
+            storage = Storage(GoogleCredentialsModel, 'id', silo.owner, 'credential')
+            credential = storage.get()
+            credential_json = json.loads(credential.to_json())
+            #self.stdout.write("%s" % credential_json)
+            if credential is None or credential.invalid == True:
+                messages.error(request, "There was a Google credential problem with user: %s for gsheet %s" % (request.user, read.pk))
+                continue
+
+            suc = import_from_google_spreadsheet(credential_json, silo, read.resource_id)
+            if suc == False:
+                messages.error(request, "Failed to import data from gsheet %s " % read.pk)
+
+        if not reads:
+            stop = True
+            messages.info(request, "Tables that only have a CSV source cannot be updated.")
     return HttpResponseRedirect(reverse_lazy('siloDetail', kwargs={'id': pk},))
 
 
@@ -852,6 +883,11 @@ def doMerge(request):
     left_table = None
     right_table = None
 
+    merged_silo_name = request.POST['merged_table_name']
+
+    if not merged_silo_name:
+        merged_silo_name = "Merging of %s and %s" % (left_table_id, right_table_id)
+
     try:
         left_table = Silo.objects.get(id=left_table_id)
     except Silo.DoesNotExist as e:
@@ -875,7 +911,7 @@ def doMerge(request):
         pass
 
     # Create a new silo
-    new_silo = Silo(name="Merging of %s and %s" % (left_table_id, right_table_id) , public=False, owner=request.user)
+    new_silo = Silo(name=merged_silo_name , public=False, owner=request.user)
     new_silo.save()
 
     # put the new silo data in mongo db.
