@@ -73,7 +73,7 @@ def mergeTwoSilos(data, left_table_id, right_table_id):
                 mapped_value = ''
                 for col in left_cols:
                     try:
-                        if merge_type == 'Concatenate':
+                        if merge_type == 'Join':
                             mapped_value += ' ' + str(row[col])
                         elif merge_type == 'Sum' or merge_type == 'Avg':
                             try:
@@ -376,14 +376,13 @@ def showRead(request, id):
     if request.method == 'POST':
         form = ReadForm(request.POST, request.FILES, instance=read_instance)
         if form.is_valid():
-            if form.instance.autopull_frequency:
-                messages.error(request, "You must first set a column in your table as a unique column in the table view page.")
-            elif form.instance.type.read_type == "CSV":
-                messages.warning(request, "A CSV source cannot be setup for auto-pull or auto-push")
-            else:
+            if form.instance.type.read_type == "CSV":
                 read = form.save()
-                #return HttpResponseRedirect("/file/" + str(read.id) + "/")
-                #return HttpResponseRedirect(reverse_lazy('listSilos'))
+                return HttpResponseRedirect("/file/" + str(read.id) + "/")
+
+            if form.instance.autopull_frequency or form.instance.autopush_frequency:
+                messages.info(request, "Your table must have a unique column set for Autopull/Autopush to work.")
+            return HttpResponseRedirect(reverse_lazy('listSilos'))
         else:
             messages.error(request, 'Invalid Form', fail_silently=False)
     else:
