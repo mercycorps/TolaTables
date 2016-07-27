@@ -90,7 +90,7 @@ def mergeTwoSilos(data, left_table_id, right_table_id):
                                 else:
                                     mapped_value = float(mapped_value) + float(row[col])
                             except Exception as e1:
-                                return {"status": "danger", "message": "The value, %s, is not a numeric value." % mapped_value}
+                                return {"status": "danger", "message": "The merge-type, %s, requires a numeric value. But the value, %s, is not a numeric value." % (merge_type, mapped_value)}
                         else:
                             pass
                     except Exception as e:
@@ -239,6 +239,7 @@ def saveAndImportRead(request):
 
     try:
         silo_id = int(request.POST.get("silo_id", None))
+        if silo_id == 0: silo_id = None
     except Exception as e:
          return HttpResponse("Silo ID can only be an integer")
 
