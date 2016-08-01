@@ -39,14 +39,203 @@ from tola.util import siloToDict, combineColumns, importJSON, saveDataToSilo, ge
 from .models import Silo, Read, ReadType, ThirdPartyTokens, LabelValueStore, Tag, UniqueFields, MergedSilosFieldMapping, TolaSites
 from .forms import ReadForm, UploadForm, SiloForm, MongoEditForm, NewColumnForm, EditColumnForm
 
-uri = 'mongodb://localhost/tola'
+logger = logging.getLogger("silo")
 db = MongoClient(settings.MONGODB_HOST).tola
 
 # To preserve fields order when reading BSON from MONGO
 opts = CodecOptions(document_class=SON)
 store = db.label_value_store.with_options(codec_options=opts)
 
-def mergeTwoSilos(data, left_table_id, right_table_id):
+
+def mergeTwoSilos(mapping_data, lsid, rsid, msid):
+    """
+    @params
+    mapping_data: data that describes how mapping is done between two silos
+    lsid: Left Silo ID
+    rsid: Right Silo ID
+    msid: Merge Silo ID
+    """
+    mappings = json.loads(mapping_data)
+
+    l_unmapped_cols = mappings.pop('left_unmapped_cols')
+    r_unampped_cols = mappings.pop('right_unmapped_cols')
+
+    merged_cols = []
+
+    #print("lsid:% rsid:%s msid:%s" % (lsid, rsid, msid))
+    l_silo_data = LabelValueStore.objects(silo_id=lsid)
+
+    r_silo_data = LabelValueStore.objects(silo_id=rsid)
+
+    # Loop through the mapped cols and add them to the list of merged_cols
+    for k, v in mappings.iteritems():
+        col_name = v['right_table_col']
+        if col_name not in merged_cols: merged_cols.append(col_name)
+
+    for lef_col in l_unmapped_cols:
+        if lef_col not in merged_cols: merged_cols.append(lef_col)
+
+    for right_col in r_unampped_cols:
+        if right_col not in merged_cols: merged_cols.append(right_col)
+
+    # retrieve the left silo
+    try:
+        lsilo = Silo.objects.get(pk=lsid)
+    except Silo.DoesNotExist as e:
+        msg = "Left Silo does not exist: silo_id=%s" % lsid
+        logger.error(msg)
+        return {'status': messages.ERROR,  'message': msg}
+
+    # retrieve the right silo
+    try:
+        rsilo = Silo.objects.get(pk=rsid)
+    except Silo.DoesNotExist as e:
+        msg = "Right Table does not exist: table_id=%s" % rsid
+        logger.error(msg)
+        return {'status': messages.ERROR,  'message': msg}
+
+    # retrieve the merged silo
+    try:
+        msilo = Silo.objects.get(pk=msid)
+    except Silo.DoesNotExist as e:
+        msg = "Merged Table does not exist: table_id=%s" % msid
+        logger.error(msg)
+        return {'status': messages.ERROR,  'message': msg}
+
+    # retrieve the unique fields set for the right silo
+    r_unique_fields = rsilo.unique_fields.all()
+
+    # retrive the unique fields of the merged_silo
+    m_unique_fields = msilo.unique_fields.all()
+
+    # make sure that the unique_fields from right table are in the merged_table
+    # by adding them to the merged_cols array.
+    for uf in r_unique_fields:
+        if uf.name not in merged_cols: merged_cols.append(uf.name)
+
+        #make sure to set the same unique_fields in the merged_table
+        if uf not in m_unique_fields:
+            unique_field = UniqueFields(name=uf.name, silo=msilo)
+            unique_field.save()
+
+    # Get the correct set of data from the right table
+    for row in r_silo_data:
+        merged_row = OrderedDict()
+        for k in row:
+            # Skip over those columns in the right table that sholdn't be in the merged_table
+            if k not in merged_cols: continue
+            merged_row[k] = row[k]
+
+        # now set its silo_id to the merged_table id
+        merged_row["silo_id"] = msid
+        merged_row["create_date"] = timezone.now()
+
+        filter_criteria = {}
+        for uf in r_unique_fields:
+            try:
+                filter_criteria.update({str(uf.name): str(merged_row[uf.name])})
+            except KeyError as e:
+                # when this excpetion occurs, it means that the col identified
+                # as the unique_col is not present in all rows of the right_table
+                logger.warning("The field, %s, is not present in table id=%s" % (uf.name, rsid))
+
+        if not r_unique_fields:
+            msg = 'The table, %s, does not have a column set as unique field' % rsilo.name
+            logger.error(msg)
+            return {'status': messages.ERROR,  'message': msg}
+
+        # adding the merged_table_id because the filter criteria should search the merged_table
+        filter_criteria.update({'silo_id': msid})
+
+        #this is an upsert operation.; note the upsert=True
+        db.label_value_store.update_one(filter_criteria, {"$set": merged_row}, upsert=True)
+
+
+    # Retrieve the unique_fields set by left table
+    l_unique_fields = lsilo.unique_fields.all()
+    for uf in l_unique_fields:
+        # if there are unique fields that are not in the right table then show error
+        if uf not in r_unique_fields:
+            msg = "Both tables (%s, %s) must have the same column set as unique fields" % (lsilo.name, rsilo.name)
+            logger.error(msg)
+            return {"status": messages.ERROR, "message": msg}
+
+    # now merge through left table and apply the mapping
+    for row in l_silo_data:
+        merged_row = OrderedDict()
+        # Loop through the column mappings for each row in left_table.
+        for k, v in mappings.iteritems():
+            merge_type = v['merge_type']
+            left_cols = v['left_table_cols']
+            right_col = v['right_table_col']
+
+            # if merge_type is specified then there must be multiple columns in the left_cols array
+            if merge_type:
+                mapped_value = ''
+                for col in left_cols:
+                    if merge_type == 'Sum' or merge_type == 'Avg':
+                        try:
+                            if mapped_value == '':
+                                mapped_value = float(row[col])
+                            else:
+                                mapped_value = float(mapped_value) + float(row[col])
+                        except Exception as e:
+                            msg = 'Failed to apply %s to column, %s : %s ' % (merge_type, col, e.message)
+                            logger.error(msg)
+                            return {'status': messages.ERROR,  'message': msg}
+                    else:
+                        mapped_value += ' ' + smart_str(row[col])
+
+                # Now calculate avg if the merge_type was actually "Avg"
+                if merge_type == 'Avg':
+                    mapped_value = mapped_value / len(left_cols)
+
+            # only one col in left table is mapped to one col in the right table.
+            else:
+                col = str(left_cols[0])
+                try:
+                    mapped_value = row[col]
+                except KeyError as e:
+                    # When updating data in merged_table at a later time, it is possible
+                    # the origianl source tables may have had some columns removed in which
+                    # we might get a KeyError so in that case we just skip it.
+                    continue
+
+            #right_col is used as in index of merged_row because one or more left cols map to one col in right table
+            merged_row[right_col] = mapped_value
+
+        # Get data from left unmapped columns:
+        for col in l_unmapped_cols:
+            if col in row:
+                merged_row[col] = row[col]
+
+        filter_criteria = {}
+        for uf in l_unique_fields:
+            try:
+                filter_criteria.update({str(uf.name): str(merged_row[uf.name])})
+            except KeyError:
+                # when this excpetion occurs, it means that the col identified
+                # as the unique_col is not present in all rows of the left_table
+                msg ="The field, %s, is not present in table id=%s" % (uf.name, lsid)
+                logger.warning(msg)
+
+        if not l_unique_fields:
+            msg = 'The table, %s, does not have a column set as unique field' % lsilo.name
+            logger.error(msg)
+            return {'status': messages.ERROR,  'message': msg}
+
+        #using the right table id becuase the filter_criteria is applied to right table
+        # to find a matching record and update it with data from left table.
+        filter_criteria.update({'silo_id': msid})
+
+        # Now update or insert a row if there is no matching record available
+        res = db.label_value_store.update_one(filter_criteria, {"$set": merged_row}, upsert=True)
+
+        # Make sure all rows have the same cols in the merged_silo
+    combineColumns(msid)
+    return {'status': messages.SUCCESS,  'message': "Merged data successfully"}
+
+def mergeTwoSilos2(data, left_table_id, right_table_id):
     """
     :param data: Mapping of the columns
     :param left_table_id: Data to merge from
@@ -104,7 +293,11 @@ def mergeTwoSilos(data, left_table_id, right_table_id):
             # there is only a single column in left_cols array
             else:
                 col = str(left_cols[0])
-                mapped_value = row[col]
+                try:
+                    mapped_value = row[col]
+                except KeyError as e:
+                    # The left table does not have this col anymore; so skip.
+                    continue
 
             # finally add the mapped_value to the merge_data_row
             merge_data_row[right_col] = mapped_value
@@ -190,25 +383,6 @@ def editSilo(request, id):
     return render(request, 'silo/edit.html', {
         'form': form, 'silo_id': id, "silo": edited_silo,
     })
-
-
-
-
-def tolaCon(request):
-    params = {'_method': 'OPTIONS'}
-    #response = requests.post("https://tola-activity-dev.mercycorps.org/api/proposals/", params)
-    response = requests.get("https://tola-activity-dev.mercycorps.org/api/")
-    #jsondata = json.loads(response.content)['actions']['POST']
-    jsondata = json.loads(response.content)
-    """
-    data = {}
-    for field in jsondata:
-        data[field] = {'label': jsondata[field]['label'], 'type': jsondata[field]['type']}
-
-    #print (data)
-    """
-    return render(request, 'silo/tolaactivity.html', {'data': jsondata })
-
 
 
 @login_required
@@ -542,8 +716,6 @@ def updateEntireColumn(request):
     colname = request.POST.get("update_col", None)
     new_val = request.POST.get("new_val", None)
     if silo_id and colname and new_val:
-        client = MongoClient(uri)
-        db = client.tola
         db.label_value_store.update_many(
                 {"silo_id": silo_id},
                     {
@@ -617,17 +789,10 @@ def updateSiloData(request, pk):
         if merged_silo_mapping:
             left_table_id = merged_silo_mapping.from_silo.pk
             right_table_id = merged_silo_mapping.to_silo.pk
+            merge_table_id = merged_silo_mapping.merged_silo.pk
             mapping = merged_silo_mapping.mapping
-            merged_data = mergeTwoSilos(mapping, left_table_id, right_table_id)
-
-            if 'status' in merged_data:
-                messages.add_message(request, merged_data['status'], merged_data['message'])
-            else:
-                lvs = LabelValueStore.objects(silo_id=silo.id)
-                num_rows_deleted = lvs.delete()
-                print(num_rows_deleted)
-                res = saveDataToSilo(silo, merged_data)
-                print(res)
+            res = mergeTwoSilos(mapping, left_table_id, right_table_id, merge_table_id)
+            messages.add_message(request, res['status'], res['message'])
         else:
             # It's not merged silo so update data from all of its sources.
             reads = silo.reads.all()
@@ -662,8 +827,6 @@ def newColumn(request,id):
     if request.method == 'POST':
         form = NewColumnForm(request.POST)  # A form bound to the POST data
         if form.is_valid():  # All validation rules pass
-            client = MongoClient(uri)
-            db = client.tola
             label = form.cleaned_data['new_column_name']
             value = form.cleaned_data['default_value']
             #insert a new column into the existing silo
@@ -695,8 +858,6 @@ def editColumns(request,id):
     if request.method == 'POST':
         form = EditColumnForm(request.POST or None, extra = data)  # A form bound to the POST data
         if form.is_valid():  # All validation rules pass
-            client = MongoClient(uri)
-            db = client.tola
             for label,value in form.cleaned_data.iteritems():
                 #update the column name if it doesn't have delete in it
                 if "_delete" not in label and str(label) != str(value) and label != "silo_id" and label != "suds" and label != "id":
@@ -734,8 +895,6 @@ def deleteColumn(request,id,column):
     DELETE A COLUMN FROM A SILO
     """
     silo = Silo.objects.get(id=id)
-    client = MongoClient(uri)
-    db = client.tola
 
     #delete a column from the existing table silo
     db.label_value_store.update_many(
@@ -784,10 +943,6 @@ def mergeColumns(request):
 
 def doMerge(request):
 
-    # setup mongodb conn.
-    client = MongoClient(uri)
-    db = client.tola
-
     # get the table_ids.
     left_table_id = request.POST['left_table_id']
     right_table_id = request.POST["right_table_id"]
@@ -813,18 +968,20 @@ def doMerge(request):
     if not data:
         return HttpResponse("no columns data passed")
 
-    merged_data = mergeTwoSilos(data, left_table_id, right_table_id)
-
-    try:
-        merged_data['status']
-        return JsonResponse(merged_data)
-    except Exception as e:
-        pass
-
     # Create a new silo
     new_silo = Silo(name=merged_silo_name , public=False, owner=request.user)
     new_silo.save()
-    res = saveDataToSilo(new_silo, merged_data)
+    merge_table_id = new_silo.pk
+
+    res = mergeTwoSilos(data, left_table_id, right_table_id, merge_table_id)
+
+    try:
+        if res['status'] == "danger":
+            new_silo.delete()
+            return JsonResponse(res)
+    except Exception as e:
+        pass
+
     mapping = MergedSilosFieldMapping(from_silo=left_table, to_silo=right_table, merged_silo=new_silo, mapping=data)
     mapping.save()
     return JsonResponse({'status': "success",  'message': 'The merged table is accessible at <a href="/silo_detail/%s/" target="_blank">Merged Table</a>' % new_silo.pk})
