@@ -36,7 +36,7 @@ from .models import GoogleCredentialsModel
 from gviews_v4 import import_from_gsheet_helper
 from tola.util import siloToDict, combineColumns, importJSON, saveDataToSilo, getSiloColumnNames
 
-from .models import Silo, Read, ReadType, ThirdPartyTokens, LabelValueStore, Tag, UniqueFields, MergedSilosFieldMapping, TolaSites
+from .models import Silo, Read, ReadType, ThirdPartyTokens, LabelValueStore, Tag, UniqueFields, MergedSilosFieldMapping, TolaSites, PIIColumn
 from .forms import ReadForm, UploadForm, SiloForm, MongoEditForm, NewColumnForm, EditColumnForm, OnaLoginForm
 
 logger = logging.getLogger("silo")
@@ -1224,5 +1224,43 @@ def export_silo(request, id):
                 data[r][cols.index(col)] = smart_str(row[col])
             writer.writerow(data[r])
     return response
+
+@login_required
+def anonymizeTable(request, id):
+    lvs = db.label_value_store.find({"silo_id": int(id)})
+    piif_cols = PIIColumn.objects.values_list("fieldname",flat=True).order_by('fieldname')
+    fields_to_remove = {}
+    for row in lvs:
+        for k in row:
+            if k in piif_cols:
+                fields_to_remove[str(k)] = ""
+
+    if fields_to_remove:
+        res = db.label_value_store.update_many({"silo_id": int(id)}, { "$unset": fields_to_remove})
+        messages.success(request, "Table has been annonymized! But do review it again.")
+    else:
+        messages.info(request, "No PIIF columns were found.")
+
+    return HttpResponseRedirect(reverse_lazy('siloDetail', kwargs={'id': id}))
+
+
+@login_required
+def identifyPII(request, silo_id):
+    """
+    Identifying Columns with Personally Identifiable Information (PII)
+    """
+    if request.method == 'GET':
+        columns = []
+        lvs = db.label_value_store.find({"silo_id": int(silo_id)})
+        for d in lvs:
+            columns.extend([k for k in d.keys() if k not in columns])
+        return render(request, 'display/annonymize_columns.html', {"silo_id": silo_id, "columns": columns})
+
+    columns = request.POST.getlist("cols[]")
+    print(columns)
+    for i, c in enumerate(columns):
+        col, created = PIIColumn.objects.get_or_create(fieldname=c, defaults={'owner': request.user})
+
+    return JsonResponse({"status":"success"})
 
 

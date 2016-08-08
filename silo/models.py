@@ -230,6 +230,20 @@ class SiloAdmin(admin.ModelAdmin):
     display = 'Data Feeds'
 
 
+class PIIColumn(models.Model):
+    """
+    Personally Identifiable Information Column is a column with data, which
+    can be used to personally identify someone.
+    """
+    owner = models.ForeignKey(User)
+    fieldname = models.CharField(blank=True, null=True, max_length=255)
+    create_date = models.DateTimeField(auto_now_add=True, editable=False)
+
+class PIIColumnAdmin(admin.ModelAdmin):
+    list_display = ('owner', 'fieldname', 'create_date')
+    search_fields = ('owner', 'fieldname')
+    display = 'PIIF Columns'
+
 class MergedSilosFieldMapping(models.Model):
     MERGE = 'merge'
     APPEND = 'append'
