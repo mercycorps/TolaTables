@@ -789,7 +789,7 @@ def siloDetail(request,id):
         #cols.extend([k for k in row.keys() if k not in cols and k != '_id' and k != 'silo_id' and k != 'create_date' and k != 'edit_date' and k != 'source_table_id'])
         cols.extend([k for k in row.keys() if k not in cols])
 
-    if silo.owner == owner or silo.public == True or owner__in == silo.shared:
+    if silo.owner == request.user or silo.public == True or owner__in == silo.shared:
         if data and cols:
             silo_table = define_table(cols)(data)
 
@@ -804,6 +804,33 @@ def siloDetail(request,id):
     else:
         messages.info(request, "You don't have the permission to see data in this table")
         return HttpResponseRedirect(request.META['HTTP_REFERER'])
+
+
+@login_required
+def siloDetail2(request, silo_id):
+    """
+    Silo Detail
+    """
+    silo = Silo.objects.get(pk=silo_id)
+    bsondata = store.find({"silo_id": silo.pk})
+    data = dumps(bsondata)
+    jdata = json.loads(data, object_pairs_hook=OrderedDict)
+    cols = ["ops"]
+    for row in jdata:
+        cols.extend([c for c in row.keys() if c not in cols and c != "_id" and c != "create_date" and c != "edit_date"])
+        row['ops']="<a href='/value_edit/%s'><span class='glyphicon glyphicon-edit' aria-hidden='true'></span></a>&nbsp; <a href='/value_delete/%s'><span style='color:red;' class='glyphicon glyphicon-trash' aria-hidden='true'></span></a>" % (row["_id"]["$oid"], row['_id']['$oid'])
+
+    datatables_cols = []
+    for c in cols:
+        if c == "ops":
+            datatables_cols.append({"data": str(c), "width": "25px"})
+        else:
+            datatables_cols.append({"data": str(c)})
+    data = dumps(jdata)
+
+    return render(request, "display/silo.html", {
+                  "data": data, "silo": silo, "cols": cols, "datatables_cols":json.dumps(datatables_cols)})
+
 
 @login_required
 def updateSiloData(request, pk):
