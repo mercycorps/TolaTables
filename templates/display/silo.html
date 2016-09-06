@@ -5,7 +5,6 @@
 {% endblock %}
 
 {% block content %}
-
     <div class="modal fade" tabindex="-1" role="dialog" id="repeats_modal">
         <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
@@ -38,9 +37,11 @@
             <li role="presentation">
                 <a href="#edit" aria-controls="edit" role="tab" data-toggle="tab">Edit</a>
             </li>
+            <!--
             <li role="presentation">
                 <a href="#test" aria-controls="test" role="tab" data-toggle="tab">Test</a>
             </li>
+            -->
         </ul>
 
         <!-- Tab panes -->
@@ -211,43 +212,52 @@
 {% block extra_js_in_body %}
     <script type="text/javascript">
         $(document).ready(function() {
-            var data_str = `{{data|safe}}`;
-            data_str = data_str.replace(/\r?\n|\r|\t/g, '');
-            //var data = $.parseJSON(`{{ data|safe }}`);
-            var data = $.parseJSON(data_str);
+            //var data_str = `{{data|safe}}`;
+            //var data = JSON.parse(JSON.stringify({{data|safe}}));
+
+            var data = [];
             var cols = [];
 
             // Loop through the header row and create a cols array for datatables.
             $("#data_table").find("th").each(function(i){
-                if (i == 0) {
+                if (i == -1) {
                     // make the first col have a set width and non-sortable
-                    cols.push({"data": $(this).text(), "orderable": false , "width": "40px"});
+                    //cols.push({"data": $(this).text(), "orderable": false , "width": "40px"});
                 } else {
                     cols.push({
                         "data": $(this).text(),
                         // Use the cell render function to return "repeats if the value is an array"
+
                         "render": function(data, type, row) {
                             if (jQuery.type(data) == "array" ) {
                                 return "<a href='#''>repeats</a>";
+                            } else if(jQuery.type(data) == "object") {
+                                return "<a href='/value_edit/" + data[Object.keys(data)[0]] + "'><span class='glyphicon glyphicon-edit' aria-hidden='true'></span></a> &nbsp;" +
+                                    "<a href='/value_delete/" + data[Object.keys(data)[0]] + "' class='btn-del' title='You are about to delete a record. Are you sure?'>" +
+                                    "<span style='color:red;' class='glyphicon glyphicon-trash' aria-hidden='true'></span></a>";
                             } else {
                                 return data;
                             }
                         }
+
                     });
                 }
-            })
+            });
 
             var silo_table = $('#data_table').DataTable({
-                stateSave: false, // save table state in local cache
-                "ordering": true,
-                "order": [], // show rows as they are read. To set order: [[1, "asc"]]
-                "pageLength": 50,
-                "data": data,
-                "columns": cols,
-                "oLanguage": {
-                    "sSearch": '',
-                    "sSearchPlaceholder": "Search ",
+                "processing": true,
+                "serverSide": true,
+                "ajax": {
+                    "url": "/api/silo/{{silo.pk}}/data/",
+                    "data": function ( d ) {
+                        console.log(d);
+                    }
                 },
+                "columns": cols,
+                "pageLength": 50,
+                "searching": false,
+                "ordering": true,
+                "stateSave": false,
             });
 
             var data = undefined;
@@ -318,19 +328,6 @@
                         $(".tab-pane").removeClass('active');
                         tab.parent('li').removeClass('active');
                     },1);
-                }
-            });
-
-
-            $('.btn-del').click(function(e) {
-                e.preventDefault();
-                var msg = e.currentTarget.title;
-                if (msg == undefined || msg.length == 0) {
-                    msg = "Are you sure you want to delete?";
-                }
-                var response = confirm(msg);
-                    if (response == true) {
-                    window.location = $(this).attr('href');
                 }
             });
 

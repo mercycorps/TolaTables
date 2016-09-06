@@ -4,6 +4,7 @@ import json
 import csv
 import base64
 import requests
+import re
 from requests.auth import HTTPDigestAuth
 import logging
 from operator import and_, or_
@@ -21,6 +22,7 @@ from django.http import HttpResponseForbidden,\
 from django.shortcuts import render_to_response, get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.encoding import smart_str, smart_text
+from django.utils.text import Truncator
 from django.db.models import Max, F, Q
 from django.views.decorators.csrf import csrf_protect
 from django.template import RequestContext, Context
@@ -765,11 +767,11 @@ def updateEntireColumn(request):
             )
         messages.success(request, "Successfully, changed the %s column value to %s" % (colname, new_val))
 
-    return HttpResponseRedirect(reverse_lazy('siloDetail', kwargs={'id': silo_id}))
+    return HttpResponseRedirect(reverse_lazy('siloDetail', kwargs={'silo_id': silo_id}))
 
 #SILO-DETAIL Show data from source
 @login_required
-def siloDetail(request,id):
+def siloDetail_OLD(request,id):
     """
     Show silo source details
     """
@@ -787,7 +789,7 @@ def siloDetail(request,id):
     cols = []
     for row in data:
         #cols.extend([k for k in row.keys() if k not in cols and k != '_id' and k != 'silo_id' and k != 'create_date' and k != 'edit_date' and k != 'source_table_id'])
-        cols.extend([k for k in row.keys() if k not in cols])
+        cols.extend([smart_str(k) for k in row.keys() if k not in cols])
 
     if silo.owner == request.user or silo.public == True or owner__in == silo.shared:
         if data and cols:
@@ -805,20 +807,21 @@ def siloDetail(request,id):
         messages.info(request, "You do not have permissions to view this table.")
         return HttpResponseRedirect(request.META['HTTP_REFERER'])
 
-
 @login_required
-def siloDetail2(request, silo_id):
+def siloDetail(request, silo_id):
     """
     Silo Detail
     """
     silo = Silo.objects.get(pk=silo_id)
-    cols = [""]
+    cols = []
     data = []
 
     if silo.owner == request.user or silo.public == True or request.user in silo.shared.all():
         bsondata = store.find({"silo_id": silo.pk})
+        #bsondata = db.label_value_store.find({"silo_id": silo.pk})
         for row in bsondata:
             # Add a column that contains edit/del links for each row in the table
+            """
             row[cols[0]]=(
                 "<a href='/value_edit/%s'>"
                     "<span class='glyphicon glyphicon-edit' aria-hidden='true'></span>"
@@ -827,21 +830,23 @@ def siloDetail2(request, silo_id):
                 "<a href='/value_delete/%s' class='btn-del' title='You are about to delete a record. Are you sure?'>"
                     "<span style='color:red;' class='glyphicon glyphicon-trash' aria-hidden='true'></span>"
                 "</a>") % (row["_id"], row['_id'])
-
+            """
             # Using OrderedDict to maintain column orders
+            #print(type(row))
             data.append(OrderedDict(row))
 
             # create a distinct list of column names to be used for datatables in templates
             cols.extend([c for c in row.keys() if c not in cols and
-                        c != "_id" and
+                        #c != "_id" and
                         c != "create_date" and
                         c != "edit_date" and
                         c != "silo_id"])
+            break
         # convert bson data to json data using json_utils.dumps from pymongo module
         data = dumps(data)
     else:
         messages.warning(request,"You do not have permission to view this table.")
-    return render(request, "display/silo.html", {"data": data, "silo": silo, "cols": cols})
+    return render(request, "display/silo.html", {"silo": silo, "cols": cols})
 
 
 @login_required
@@ -894,7 +899,7 @@ def updateSiloData(request, pk):
                         for msg in msgs:
                             messages.add_message(request, msg.get("level", "warning"), msg.get("msg", None))
 
-    return HttpResponseRedirect(reverse_lazy('siloDetail', kwargs={'id': pk},))
+    return HttpResponseRedirect(reverse_lazy('siloDetail', kwargs={'silo_id': pk},))
 
 
 #Add a new column on to a silo
@@ -1083,9 +1088,10 @@ def valueEdit(request,id):
     data = {}
     jsondoc = json.loads(doc)
     silo_id = None
+
     for item in jsondoc:
         for k, v in item.iteritems():
-            #print("The key and value are ({}) = ({})".format(k, v))
+            #print("The key and value are ({}) = ({})".format(smart_str(k), smart_str(v)))
             if k == "_id":
                 #data[k] = item['_id']['$oid']
                 pass
@@ -1099,6 +1105,7 @@ def valueEdit(request,id):
                 create_date = datetime.datetime.fromtimestamp(item['create_date']['$date']/1000)
                 data[k] = create_date.strftime('%Y-%m-%d')
             else:
+                k = Truncator(re.sub('\s+', ' ', k).strip()).chars(40)
                 data[k] = v
     if request.method == 'POST': # If the form has been submitted...
         form = MongoEditForm(request.POST or None, extra = data) # A form bound to the POST data
@@ -1202,7 +1209,7 @@ def anonymizeTable(request, id):
     else:
         messages.info(request, "No PIIF columns were found.")
 
-    return HttpResponseRedirect(reverse_lazy('siloDetail', kwargs={'id': id}))
+    return HttpResponseRedirect(reverse_lazy('siloDetail', kwargs={'silo_id': id}))
 
 
 @login_required
