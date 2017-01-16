@@ -119,3 +119,50 @@ class ReadTypeViewSet(viewsets.ModelViewSet):
     """
     queryset = ReadType.objects.all()
     serializer_class = ReadTypeSerializer
+
+#####-------API Views to Feed Data to Tolawork API requests-----####
+'''
+    This view responds to the 'GET' request from TolaWork
+'''
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.response import Response
+
+
+@api_view(['GET'])
+@authentication_classes(())
+@permission_classes(())
+
+def tables_api_view(request):
+    """
+   Get TolaTables Tables owned by a user logged in Tolawork & a list of logged in Users,
+    """
+    if request.method == 'GET':
+        user = request.GET.get('email')
+
+        user_id = User.objects.get(email=user).id
+
+        tables = Silo.objects.filter(owner=user_id).order_by('-create_date')
+        table_logged_users = logged_in_users()
+
+        table_serializer = SiloModelSerializer(tables, many=True)
+        user_serializer = LoggedUserSerializer(table_logged_users, many=True)
+
+        users = user_serializer.data
+        tables = table_serializer.data
+
+
+        tables_data = {'tables':tables, 'table_logged_users': users}
+
+
+        return Response(tables_data)
+
+#return users logged into TolaActivity
+def logged_in_users():
+
+    logged_users = {}
+
+    logged_users = LoggedUser.objects.order_by('username')
+    for logged_user in logged_users:
+        logged_user.queue = 'TolaTables'
+
+    return logged_users
