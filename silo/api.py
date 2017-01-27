@@ -11,6 +11,9 @@ from silo.permissions import IsOwnerOrReadOnly
 from django.contrib.auth.models import User
 from rest_framework.decorators import detail_route, list_route
 from rest_framework import pagination
+from rest_framework.views import APIView
+from rest_framework_json_api.parsers import JSONParser
+from rest_framework_json_api.renderers import JSONRenderer
 
 
 import django_filters
@@ -49,6 +52,23 @@ class PublicSiloViewSet(viewsets.ReadOnlyModelViewSet):
         data = LabelValueStore.objects(silo_id=id).to_json()
         json_data = json.loads(data)
         return JsonResponse(json_data, safe=False)
+
+class SilosByUser(viewsets.ReadOnlyModelViewSet):
+    """
+    Lists all silos by a user; returns data in a format
+    understood by Ember DataStore.
+    """
+    serializer_class = SiloSerializer
+    parser_classes = (JSONParser,)
+    renderer_classes = (JSONRenderer,)
+
+    def get_queryset(self):
+        silos = Silo.objects.all()
+        user_id = self.request.query_params.get("user_id", None)
+        if user_id:
+            silos = silos.filter(owner__id=user_id)
+        return silos
+
 
 class SiloViewSet(viewsets.ModelViewSet):
     """
@@ -119,3 +139,50 @@ class ReadTypeViewSet(viewsets.ModelViewSet):
     """
     queryset = ReadType.objects.all()
     serializer_class = ReadTypeSerializer
+
+#####-------API Views to Feed Data to Tolawork API requests-----####
+'''
+    This view responds to the 'GET' request from TolaWork
+'''
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.response import Response
+
+
+@api_view(['GET'])
+@authentication_classes(())
+@permission_classes(())
+
+def tables_api_view(request):
+    """
+   Get TolaTables Tables owned by a user logged in Tolawork & a list of logged in Users,
+    """
+    if request.method == 'GET':
+        user = request.GET.get('email')
+
+        user_id = User.objects.get(email=user).id
+
+        tables = Silo.objects.filter(owner=user_id).order_by('-create_date')
+        table_logged_users = logged_in_users()
+
+        table_serializer = SiloModelSerializer(tables, many=True)
+        user_serializer = LoggedUserSerializer(table_logged_users, many=True)
+
+        users = user_serializer.data
+        tables = table_serializer.data
+
+
+        tables_data = {'tables':tables, 'table_logged_users': users}
+
+
+        return Response(tables_data)
+
+#return users logged into TolaActivity
+def logged_in_users():
+
+    logged_users = {}
+
+    logged_users = LoggedUser.objects.order_by('username')
+    for logged_user in logged_users:
+        logged_user.queue = 'TolaTables'
+
+    return logged_users
