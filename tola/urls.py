@@ -15,19 +15,26 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.auth.views import login, logout
 from silo.api import *
+from board.api import *
 
 # Uncomment the next two lines to enable the admin:
 from django.contrib import admin
 admin.autodiscover()
 
 #REST FRAMEWORK
-router = routers.DefaultRouter()
+router = routers.DefaultRouter(trailing_slash=False)
 router.register(r'silo', SiloViewSet, base_name="silo")
+router.register(r'usersilos', SilosByUser, base_name='usersilos')
 router.register(r'public_tables', PublicSiloViewSet, base_name="public_tables")
 router.register(r'users', UserViewSet)
 router.register(r'read', ReadViewSet)
 router.register(r'readtype', ReadTypeViewSet)
 router.register(r'tag', TagViewSet)
+router.register(r'boards', BoardViewSet)
+router.register(r'graphs', GraphViewSet)
+router.register(r'graphmodels', GraphModelViewSet)
+router.register(r'items', ItemViewSet)
+router.register(r'graphinputs', GraphInputViewSet)
 
 
 urlpatterns =[
@@ -49,7 +56,6 @@ urlpatterns =[
     url(r'^toggle_silo_publicity/$', views.toggle_silo_publicity, name='toggle_silo_publicity'),
 
     url(r'^silos', views.listSilos, name='listSilos'),
-    url(r'^silo/(?P<id>\w+)/$', views.siloDetail_OLD, name='siloDetail2'),
     url(r'^silo_detail/(?P<silo_id>\w+)/$', views.siloDetail, name='siloDetail'),
     url(r'^silo_edit/(?P<id>\w+)/$', views.editSilo, name='editSilo'),
     url(r'^silo_delete/(?P<id>\w+)/$', views.deleteSilo, name='deleteSilo'),
