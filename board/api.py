@@ -24,10 +24,11 @@ from rest_framework_json_api.views import RelationshipView
 
 from rest_framework_json_api.utils import format_drf_errors
 
+HTTP_422_UNPROCESSABLE_ENTITY = 422
+
 class JsonApiViewSet(viewsets.ModelViewSet):
     """
-    This is an example on how to configure DRF-jsonapi from
-    within a class. It allows using DRF-jsonapi alongside
+    Configuring DRF-jsonapi from within a class so that it can be used alongside
     vanilla DRF API views.
     """
     parser_classes = [
@@ -56,7 +57,6 @@ class JsonApiViewSet(viewsets.ModelViewSet):
 class BoardViewSet(JsonApiViewSet):
     queryset = Board.objects.all()
     serializer_class = BoardSerializer
-    #authentication_classes = (JSONWebTokenAuthentication, )
     permission_classes = []
 
 
