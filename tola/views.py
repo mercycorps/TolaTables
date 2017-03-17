@@ -6,9 +6,22 @@ from django.contrib.auth import logout
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.contrib import auth
+
+from django.views.generic import TemplateView
+from django.contrib.auth.mixins import LoginRequiredMixin
+
 from silo.models import TolaUser,TolaSites
 from tola.forms import RegistrationForm, NewUserRegistrationForm, NewTolaUserRegistrationForm
 
+from rest_framework_swagger.renderers import OpenAPIRenderer, SwaggerUIRenderer
+from rest_framework.decorators import api_view, renderer_classes
+from rest_framework import response, schemas
+
+@api_view()
+@renderer_classes([OpenAPIRenderer, SwaggerUIRenderer])
+def schema_view(request):
+    generator = schemas.SchemaGenerator(title='Assets API')
+    return response.Response(generator.get_schema(request=request))
 
 
 def register(request):
@@ -67,4 +80,14 @@ def logout_view(request):
     logout(request)
     # Redirect to a success page.
     return HttpResponseRedirect("/")
+
+
+class BoardView(LoginRequiredMixin, TemplateView):
+    template_name = 'board.html'
+
+    def render_to_response(self, context, **response_kwargs):
+        response = super(BoardView, self).render_to_response(context, **response_kwargs)
+        if self.request.user.is_authenticated():
+            response.set_cookie(key='token', value=self.request.user.auth_token)
+        return response
 

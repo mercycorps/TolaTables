@@ -30,16 +30,20 @@ router.register(r'users', UserViewSet)
 router.register(r'read', ReadViewSet)
 router.register(r'readtype', ReadTypeViewSet)
 router.register(r'tag', TagViewSet)
+
+router.register(r'owners', OwnerViewSet)
 router.register(r'boards', BoardViewSet)
 router.register(r'graphs', GraphViewSet)
 router.register(r'graphmodels', GraphModelViewSet)
 router.register(r'items', ItemViewSet)
 router.register(r'graphinputs', GraphInputViewSet)
+router.register(r'boardsilos', SiloBoardViewSet)
 
 
 urlpatterns =[
     url(r'^api/', include(router.urls)),
     url(r'^api-auth/', include('rest_framework.urls', namespace='rest_framework')),
+    url(r'^api/docs/', tola_views.schema_view),
 
     url(r'^admin/', include(admin.site.urls)),
     url(r'^$', views.index, name='index'),
@@ -87,6 +91,7 @@ urlpatterns =[
     url(r'^accounts/logout/$', tola_views.logout_view, name='logout'),
 
     url(r'^accounts/profile/$', tola_views.profile, name='profile'),
+    url(r'^board/$', tola_views.BoardView.as_view(), name='board'),
 
     #Auth backend URL's
     url('', include('django.contrib.auth.urls', namespace='auth')),
