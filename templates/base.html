@@ -26,12 +26,18 @@
 
         <link href="{{ STATIC_URL }}css/datatables.min.css" rel="stylesheet" type="text/css" />
 
-        {% block extra_js_in_header %}
-        <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
         <script type="text/javascript" src="{{ STATIC_URL }}js/jquery-1.11.1.min.js"></script>
 
         <!-- App specific Javascript -->
         <script type="text/javascript" src="{{ STATIC_URL }}js/app.js"></script>
+
+        {% block extra_js_in_header %}
+        <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+
+
+        {% endblock %}
+
+        {% block extra_css %}
 
         {% endblock %}
 
@@ -72,7 +78,18 @@
                     </ul>
                     <ul class="nav navbar-nav navbar-right">
                         <li class="dropdown">
-                            <a href="#" class="dropdown-toggle" data-toggle="dropdown"><span class="glyphicon glyphicon-user"></span> {{ user.userprofile.name }}<b class="caret"></b></a>
+                             <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+                                {% if "demo" in request.build_absolute_uri %}
+                                    <span class="label label-danger">DEMO SERVER</span>
+                                {% elif  "127." in request.build_absolute_uri %}
+                                    <span class="label label-danger">LOCAL SERVER</span>
+                                {% elif "dev" in request.build_absolute_uri %}
+                                    <span class="label label-danger">DEV SERVER</span>
+                                {% elif "report" in request.build_absolute_uri %}
+                                    <span class="label label-info">REPORT SERVER</span>
+                                {% endif %}
+                                <span class="glyphicon glyphicon-user"></span> {{ user.tola_user.name }} <b class="caret"></b>
+                            </a>
                             <ul class="dropdown-menu">
                                 <li><a href="{% url 'logout' %}"><span class="glyphicon glyphicon-lock"></span> Logout</a></li>
                                 <li><a href="{% url 'profile' %}"><span class="glyphicon glyphicon-user"></span> Profile</a></li>
@@ -180,7 +197,7 @@
             <!-- Sticky Footer -->
             <div class="container">
                 <div class="col-md-6 text-left">
-                    <a href="http://www.toladata.com" class="text-muted"><b>Tola</b>Data: Built by</a> <a href="http://www.mercycorps.org" class="text-muted">MercyCorps</a>
+                    <a href="http://www.toladata.com" class="text-muted"><b>Tola</b>Data</a>
                 </div>
                 <div class="col-md-6 text-right">
                     <a href="http://tola.work/documentation" class="text-muted">Documentation</a> | <a href="http://tola.work/faq" class="text-muted">FAQ</a> | <a href="http://tola.work/helpdesk/tickets/submit/" class="text-muted">Feedback</a> | <a href="https://github.com/toladata/TolaActivity/blob/master/LICENSE" class="text-muted">License</a>

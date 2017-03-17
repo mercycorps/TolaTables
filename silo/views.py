@@ -33,9 +33,6 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.db.models import Count
 
-
-from django_tables2 import RequestConfig
-from .tables import define_table
 from silo.custom_csv_dict_reader import CustomDictReader
 from .models import GoogleCredentialsModel
 from gviews_v4 import import_from_gsheet_helper
@@ -702,6 +699,7 @@ def getJSON(request):
 #display
 #INDEX
 def index(request):
+    #if request.COOKIES.get('auth_token', None):
 
     # get all of the table(silo) info for logged in user and public data
     if request.user.is_authenticated():
@@ -725,7 +723,11 @@ def index(request):
         get_tags = Tag.objects.annotate(num_tag=Count('silos')).order_by('-num_tag')[:8]
     get_public = Silo.objects.filter(public=1)
     site = TolaSites.objects.get(site_id=1)
-    return render(request, 'index.html',{'get_silos':get_silos,'get_public':get_public, 'count_all':count_all, 'count_shared':count_shared, 'count_public': count_public, 'get_reads': get_reads, 'get_tags': get_tags, 'site': site})
+    response = render(request, 'index.html',{'get_silos':get_silos,'get_public':get_public, 'count_all':count_all, 'count_shared':count_shared, 'count_public': count_public, 'get_reads': get_reads, 'get_tags': get_tags, 'site': site})
+
+    if  request.COOKIES.get('auth_token', None) is None and request.user.is_authenticated():
+        response.set_cookie('auth_token', user.auth_token)
+    return  response
 
 
 def toggle_silo_publicity(request):
@@ -786,43 +788,6 @@ def updateEntireColumn(request):
 
     return HttpResponseRedirect(reverse_lazy('siloDetail', kwargs={'silo_id': silo_id}))
 
-#SILO-DETAIL Show data from source
-@login_required
-def siloDetail_OLD(request,id):
-    """
-    Show silo source details
-    """
-    silo = Silo.objects.filter(pk=id).prefetch_related("unique_fields")[0]
-    owner = silo.owner
-    public = silo.public
-
-    # Loads the bson objects from mongo
-    bsondata = store.find({"silo_id": silo.pk})
-    # Now convert bson to json string using OrderedDict to main fields order
-    json_string = dumps(bsondata)
-    # Now decode the json string into python object
-    data = json.loads(json_string, object_pairs_hook=OrderedDict)
-
-    cols = []
-    for row in data:
-        #cols.extend([k for k in row.keys() if k not in cols and k != '_id' and k != 'silo_id' and k != 'create_date' and k != 'edit_date' and k != 'source_table_id'])
-        cols.extend([smart_str(k) for k in row.keys() if k not in cols])
-
-    if silo.owner == request.user or silo.public == True or owner__in == silo.shared:
-        if data and cols:
-            silo_table = define_table(cols)(data)
-
-            #This is needed in order for table sorting to work
-            RequestConfig(request).configure(silo_table)
-
-            #send the keys and vars from the json data to the template along with submitted feed info and silos for new form
-            return render(request, "display/silo_detail.html", {"silo_table": silo_table, 'silo': silo, 'id':id, 'cols': cols})
-        else:
-            messages.error(request, "There is not data in Table with id = %s" % id)
-            return HttpResponseRedirect(reverse_lazy("listSilos"))
-    else:
-        messages.info(request, "You do not have permissions to view this table.")
-        return HttpResponseRedirect(request.META['HTTP_REFERER'])
 
 @login_required
 def siloDetail(request, silo_id):
@@ -967,8 +932,6 @@ def editColumns(request,id):
     FORM TO CREATE A NEW COLUMN FOR A SILO
     """
     silo = Silo.objects.get(id=id)
-    data = getSiloColumnNames(id)
-    form = EditColumnForm(initial={'silo_id': silo.id}, extra=data)
 
     if request.method == 'POST':
         form = EditColumnForm(request.POST or None, extra = data)  # A form bound to the POST data

@@ -11,6 +11,9 @@ from silo.permissions import IsOwnerOrReadOnly
 from django.contrib.auth.models import User
 from rest_framework.decorators import detail_route, list_route
 from rest_framework import pagination
+from rest_framework.views import APIView
+from rest_framework_json_api.parsers import JSONParser
+from rest_framework_json_api.renderers import JSONRenderer
 
 
 import django_filters
@@ -50,6 +53,23 @@ class PublicSiloViewSet(viewsets.ReadOnlyModelViewSet):
         json_data = json.loads(data)
         return JsonResponse(json_data, safe=False)
 
+class SilosByUser(viewsets.ReadOnlyModelViewSet):
+    """
+    Lists all silos by a user; returns data in a format
+    understood by Ember DataStore.
+    """
+    serializer_class = SiloSerializer
+    parser_classes = (JSONParser,)
+    renderer_classes = (JSONRenderer,)
+
+    def get_queryset(self):
+        silos = Silo.objects.all()
+        user_id = self.request.query_params.get("user_id", None)
+        if user_id:
+            silos = silos.filter(owner__id=user_id)
+        return silos
+
+
 class SiloViewSet(viewsets.ModelViewSet):
     """
     This viewset automatically provides `list`, `create`, `retrieve`,
@@ -61,6 +81,7 @@ class SiloViewSet(viewsets.ModelViewSet):
     # permission_classes = (IsOwnerOrReadOnly,)
     filter_fields = ('owner__username','shared__username','id','tags','public')
     filter_backends = (filters.DjangoFilterBackend,)
+    permission_classes = []
 
     def get_queryset(self):
         user = self.request.user
