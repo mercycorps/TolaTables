@@ -14,7 +14,7 @@ def get_json_form(excluded_fields):
             self.fields['file_data'].label = "Upload JSON"
         class Meta:
             model = Read
-            exclude = excluded_fields
+            exclude = excluded_fields +  ['onedrive_file', 'autopush_frequency', 'autopull_frequency', 'autopush_expiration', 'autopull_expiration']
             widgets = {
                 'owner': forms.HiddenInput(),
                 'type': forms.HiddenInput(),

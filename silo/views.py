@@ -611,11 +611,11 @@ def showRead(request, id):
     if read_type == "GSheet Import" or read_type == "ONA":
         excluded_fields = excluded_fields + ['username', 'password', 'file_data','autopush_frequency']
     elif read_type == "JSON":
-        excluded_fields = excluded_fields + ['file_data','autopush_frequency']
+        excluded_fields = excluded_fields + ['file_data','autopush_frequency',  'onedrive_file',]
     elif read_type == "Google Spreadsheet":
         excluded_fields = excluded_fields + ['username', 'password', 'file_data', 'autopull_frequency']
     elif read_type == "CSV":
-        excluded_fields = excluded_fields + ['username', 'password', 'autopush_frequency', 'autopull_frequency', 'read_url']
+        excluded_fields = excluded_fields + ['username', 'password', 'autopush_frequency', 'autopull_frequency', 'read_url', 'onedrive_file',]
     elif read_type == "OneDrive":
         user = User.objects.get(username__exact=request.user)
         social = user.social_auth.get(provider='microsoft-graph')
