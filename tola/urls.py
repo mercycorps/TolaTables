@@ -1,7 +1,7 @@
 from tola import views as tola_views
 from silo import views
 from silo import gviews_v4
-from silo import google_views
+#from silo import google_views
 
 from silo import tola_activity_views
 
