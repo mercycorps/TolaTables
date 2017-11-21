@@ -4,6 +4,7 @@ import urllib2
 import json
 import base64
 import requests
+from collections import OrderedDict
 
 from django.utils.encoding import smart_text
 from django.utils import timezone
@@ -107,6 +108,11 @@ def saveDataToSilo(silo, data, read=-1, user=None):
     unique_fields = silo.unique_fields.all()
     skipped_rows = set()
     keys = []
+    try:
+        keys = data.fieldnames
+        keys = [cleanKey(key) for key in keys]
+    except AttributeError:
+        pass
     fieldToType = getColToTypeDict(silo)
     for counter, row in enumerate(data):
         # reseting filter_criteria for each row
@@ -145,36 +151,39 @@ def saveDataToSilo(silo, data, read=-1, user=None):
                 continue
         else:
             lvs = LabelValueStore()
+            lvs.silo_id = silo.pk
+            lvs.create_date = timezone.now()
+            lvs.read_id = read_source_id
 
         counter = 0
         # set the fields in the curernt document and save it
 
-        row = cleanDataObj(row)
+        row = cleanDataObj(row, silo)
 
         for key, val in row.iteritems():
-            if key == "" or key is None or key == "silo_id": continue
-            elif key == "id" or key == "_id": key = "user_assigned_id"
-            elif key == "edit_date": key = "editted_date"
-            elif key == "create_date": key = "created_date"
-            if type(val) == str or type(val) == unicode:
-                val = smart_str(val, strings_only=True).strip()
-            if fieldToType.get(key, 'string') == 'int':
-                try:
-                    val = int(val)
-                except ValueError as e:
-                    continue
-            if fieldToType.get(key, 'string') == 'double':
-                try:
-                    val = float(val)
-                except ValueError as e:
-                    continue
+            # if key == "" or key is None or key == "silo_id": continue
+            # elif key == "id" or key == "_id": key = "user_assigned_id"
+            # elif key == "edit_date": key = "editted_date"
+            # elif key == "create_date": key = "created_date"
+            # if type(val) == str or type(val) == unicode:
+            #     val = smart_str(val, strings_only=True).strip()
+            # if fieldToType.get(key, 'string') == 'int':
+            #     try:
+            #         val = int(val)
+            #     except ValueError as e:
+            #         continue
+            # if fieldToType.get(key, 'string') == 'double':
+            #     try:
+            #         val = float(val)
+            #     except ValueError as e:
+            #         continue
 
             if not isinstance(key, tuple):
                 if key not in keys:
                     keys.append(key)
                 setattr(lvs, key, val)
 
-            counter += 1
+        counter += 1
         lvs = calculateFormulaCell(lvs,silo)
         lvs.save()
     addColsToSilo(silo, keys)
@@ -182,18 +191,35 @@ def saveDataToSilo(silo, data, read=-1, user=None):
     return res
 
 
-def cleanDataObj(obj):
-    if not isinstance(obj, (dict, list)):
-        if isinstance(obj, basestring): return obj.strip()
+def cleanDataObj(obj, silo):
+    if not isinstance(obj, (dict, list, OrderedDict)):
+        fieldToType = getColToTypeDict(silo)
+        if type(obj) == str or type(obj) == unicode:
+            obj = smart_str(obj, strings_only=True).strip()
+        if fieldToType.get(obj, 'string') == 'int':
+            try:
+                obj = int(obj)
+            except ValueError as e:
+                pass
+        if fieldToType.get(obj, 'string') == 'double':
+            try:
+                obj = float(obj)
+            except ValueError as e:
+                pass
         return obj
 
     if isinstance(obj, list):
-        return [cleanDataObj(v) for v in obj]
+        return [cleanDataObj(v, silo) for v in obj]
 
-    return {cleanKey(k): cleanDataObj(v) for k,v in obj.items()}
+    return {cleanKey(k): cleanDataObj(v, silo) for k,v in obj.items()}
 
 
 def cleanKey(key):
+    if key == "" or key is None or key == "silo_id":
+        return key
+    elif key == "id" or key == "_id": key = "user_assigned_id"
+    elif key == "edit_date": key = "editted_date"
+    elif key == "create_date": key = "created_date"
     key = ' '.join(key.split())
     key = key.replace(".", "_").replace("$", "USD")
     try:
