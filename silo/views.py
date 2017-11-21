@@ -1339,7 +1339,7 @@ def valueEdit(request,id):
                 create_date = datetime.datetime.fromtimestamp(item['create_date']['$date']/1000)
                 data[k] = create_date.strftime('%Y-%m-%d')
             else:
-                k = Truncator(re.sub('\s+', ' ', k).strip()).chars(40)
+                # k = Truncator(re.sub('\s+', ' ', k).strip()).chars(40)
                 data[k] = v
 
         keys = item.keys()
