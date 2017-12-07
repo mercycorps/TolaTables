@@ -306,6 +306,11 @@ LOGGING = {
             'level': 'INFO',
             'propagate': True,
         },
+        'silo': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
     },
 }
 

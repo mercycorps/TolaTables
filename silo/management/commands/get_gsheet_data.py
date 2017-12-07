@@ -36,5 +36,5 @@ class Command(BaseCommand):
                     if msg.get("level") != 25:
                         # replace with logger
                         logger.error("silo_id=%s, read_id=%s, level: %s, msg: %s" % (silo.pk, read.pk, msg.get("level"), msg.get("msg")))
-                        send_mail("Tola-Tables Auto-Pull Failed", "table_id: %s, source_id: %s, %s %s" % (silo.pk, read.pk, msg.get("level"), msg.get("msg")), "tolatables@mercycorps.org", [silo.owner.email], fail_silently=False)
+                        #send_mail("Tola-Tables Auto-Pull Failed", "table_id: %s, source_id: %s, %s %s" % (silo.pk, read.pk, msg.get("level"), msg.get("msg")), "tolatables@mercycorps.org", [silo.owner.email], fail_silently=False)
         self.stdout.write("done executing gsheet import command job")
