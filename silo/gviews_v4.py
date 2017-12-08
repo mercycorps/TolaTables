@@ -536,6 +536,7 @@ def export_to_gsheet_helper(user, spreadsheet_id, silo_id, query, headers):
 def export_to_gsheet(request, id):
     spreadsheet_id = request.GET.get("resource_id", None)
     query = json.loads(request.GET.get('query',"{}"))
+    print 'querythis', query
     if type(query) == list:
         query = json.loads(makeQueryForHiddenRow(query))
     cols_to_export = json.loads(request.GET.get('shown_cols',json.dumps(getSiloColumnNames(id))))

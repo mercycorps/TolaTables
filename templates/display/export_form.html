@@ -21,7 +21,7 @@
               <tr>
           {% endfor %}
         </table>
-        <p> This form below allows you to pick under what condition to export a row</p>
+        <!-- <p> This form below allows you to pick under what condition to export a row</p>
         <button id="addcondition">Add Condition</button>
         <button id="addblankchar">Add Blank Character</button>
         <table id="listconditions" class="table table-bordered table-hover table-striped">
@@ -41,7 +41,7 @@
                 <td><button class="removeRow glyphicon glyphicon-trash btn  btn-sm btn-danger"></button></td>
               </tr>
           {% endfor %}
-        </table>
+        </table> -->
         <input id="ERA" type="button" value="Export as REST API" class="btn btn-sm btn-primary">
         <input id="EJF" type="button" value="Export as JSON FEED" class="btn btn-sm btn-primary">
         <input id="EC" type="button" value="Export as CSV" class="btn btn-sm btn-primary">
@@ -428,7 +428,8 @@
                   }
                 });
 
-                hide_rows = JSON.stringify(hide_rows);
+                // hide_rows = JSON.stringify(hide_rows);
+                hide_rows = JSON.stringify('{}')
                 shown_cols = JSON.stringify(shown_cols);
 
                 setDatabaseQuery(hide_rows);
