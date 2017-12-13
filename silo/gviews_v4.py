@@ -339,22 +339,16 @@ def export_to_gsheet_helper(user, spreadsheet_id, silo_id, query, headers):
                 else:
                     values.append({"userEnteredValue": {"stringValue": smart_text(row[header])}})
             except KeyError:
-                pass
+                values.append({"userEnteredValue": {"stringValue": ""}})
         rows.append({"values": values})
 
     # prepare column names as a header row in spreadsheet
     values = []
     for header in headers:
-
-        try:
-            #Add header to the list only if the silo header exists in the MongoDB data
-            silo_data[0][header]
-            values.append({
-                          "userEnteredValue": {"stringValue": header},
-                          'userEnteredFormat': {'backgroundColor': {'red':0.5,'green':0.5, 'blue': 0.5}}
-                          })
-        except KeyError:
-            pass
+        values.append({
+            "userEnteredValue": {"stringValue": header},
+            'userEnteredFormat': {'backgroundColor': {'red':0.5,'green':0.5, 'blue': 0.5}}
+        })          
 
     # Now update the rows array place holder with real column names
     rows[0]["values"] = values
