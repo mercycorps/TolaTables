@@ -229,6 +229,11 @@ def cleanKey(key):
     except:
         raise
 
+    # Mongoengine doesn't seem to be able to save keys with leading underscores
+    # The underscore in sys_ makes collisions with user defined headers less likely
+    if key.startswith('_'):
+        key = 'sys_'+key
+
     return key
 
 

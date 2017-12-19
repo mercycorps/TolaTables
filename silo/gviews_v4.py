@@ -328,16 +328,24 @@ def export_to_gsheet_helper(user, spreadsheet_id, silo_id, query, headers):
         for x, header in enumerate(headers):
             try:
                 if type(row[header]) == list:
-                    try:
-                        repeat_data[header].append(row[header])
-                    except KeyError as e:
-                        repeat_data[header] = [row[header]]
-                    repeat_cells[header] = (x,y+1)
-                    values.append({"userEnteredValue": {"stringValue": smart_text(header)}})
-                    if header not in repeat_headers and header not in other_title:
-                        repeat_headers.append(header)
+                    if header == 'sys__geolocation':
+                        geoString = ",".join([str(h) for h in list(row[header])])
+                        values.append({"userEnteredValue": {"stringValue": smart_text(geoString)}})
+
+                    elif len(row[header]) > 0:
+                        try:
+                            repeat_data[header].append(row[header])
+                        except KeyError as e:
+                            repeat_data[header] = [row[header]]
+                        repeat_cells[header] = (x,y+1)
+                        values.append({"userEnteredValue": {"stringValue": smart_text(header)}})
+                        if header not in repeat_headers and header not in other_title:
+                            repeat_headers.append(header)
+                    else:
+                        values.append({"userEnteredValue": {"stringValue": ""}})
                 else:
                     values.append({"userEnteredValue": {"stringValue": smart_text(row[header])}})
+            #handles a header in the SQL isn't found in Mongo
             except KeyError:
                 values.append({"userEnteredValue": {"stringValue": ""}})
         rows.append({"values": values})
@@ -348,13 +356,13 @@ def export_to_gsheet_helper(user, spreadsheet_id, silo_id, query, headers):
         values.append({
             "userEnteredValue": {"stringValue": header},
             'userEnteredFormat': {'backgroundColor': {'red':0.5,'green':0.5, 'blue': 0.5}}
-        })          
+        })
 
     # Now update the rows array place holder with real column names
     rows[0]["values"] = values
     #batch all of remote api calls into the requests array
     requests = []
-
+    
     # Add extra sheets for repeats
     for header in repeat_headers:
         requests.append({
