@@ -31,7 +31,14 @@ venv-tt/
 conf/awstats.conf
 conf/
 djangocosign/
-local.py
+local-dev.py
+local_secret.py
+
+#fixtures
+read_types_local.json
+sites_local.json
+tags_local.json
+tolasites_local.json
 
 #Misc.
 .idea/
@@ -43,3 +50,7 @@ client_secrets.json
 error.log
 *.secret
 *.secret.yml
+src/
+
+#Templates
+login_types.html

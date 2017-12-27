@@ -31,4 +31,4 @@ class Command(BaseCommand):
                 print(result)
                 if result[0] == "error" or result[0] == 40:
                     logger.error("Silo_ID: %s %s" % (result[2], result[1]))
-                    send_mail("Tola-Tables Auto-Pull Failed", "table_id: %s, source_id: %s, %s %s" % (silo.pk, read.pk, result[2], result[1]), "tolatables@mercycorps.org", [silo.owner.email], fail_silently=False)
+                    # send_mail("Tola-Tables Auto-Pull Failed", "table_id: %s, source_id: %s, %s %s" % (silo.pk, read.pk, result[2], result[1]), "tolatables@mercycorps.org", [silo.owner.email], fail_silently=False)

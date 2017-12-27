@@ -1,5 +1,15 @@
 from base import *
 
+########## GOOGLE AUTH
+SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.getenv('SOCIAL_AUTH_GOOGLE_OAUTH2_KEY')
+SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.getenv('SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET')
+GOOGLE_API_KEY = "ReplaceThisWithARealKey"
+
+########## MICROSOFT AUTH
+SOCIAL_AUTH_MICROSOFT_GRAPH_RESOURCE = os.getenv('SOCIAL_AUTH_MICROSOFT_GRAPH_RESOURCE')
+SOCIAL_AUTH_MICROSOFT_GRAPH_KEY = os.getenv('SOCIAL_AUTH_MICROSOFT_GRAPH_KEY')
+SOCIAL_AUTH_MICROSOFT_GRAPH_SECRET = os.getenv('SOCIAL_AUTH_MICROSOFT_GRAPH_SECRET')
+SOCIAL_AUTH_MICROSOFT_GRAPH_REDIRECT_URL = os.getenv('SOCIAL_AUTH_MICROSOFT_GRAPH_REDIRECT_URL')
 
 ########## IN-MEMORY TEST DATABASE
 DATABASES = {
@@ -18,7 +28,21 @@ from os.path import join, normpath
 
 SECRET_KEY = r"!0^+)=t*ly6ycprf9@adsfsdfdfsdff#pa*3333*lp5k9ko7"
 
-#from mongoengine import connect
+############ MONGO DB #####################
+
+import mongoengine
+try:
+    from tola.settings.local_secret import MONGODB_TEST_URI
+    MONGODB_URI = MONGODB_TEST_URI
+except ImportError:
+    MONGODB_URI = 'mongodb://localhost:27017/tola'
+
+mongoengine.connect('tola', MONGODB_URI)
+
+TOLATABLES_MONGODB_NAME = os.environ['TOLATABLES_MONGODB_NAME']
+
+################ END OF MONGO DB #######################
+
 
 ########## MANAGER CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#admins
@@ -70,7 +94,7 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 GOOGLE_STEP2_URI = ''
 GOOGLE_CLIENT_ID = ''
 GOOGLE_CLIENT_SECRET = ''
-
+GOOGLE_REDIRECT_URL = ''
 
 ########## CACHE CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#caches
@@ -80,8 +104,3 @@ CACHES = {
     }
 }
 ########## END CACHE CONFIGURATION
-
-
-
-
-
