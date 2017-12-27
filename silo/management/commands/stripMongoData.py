@@ -1,12 +1,11 @@
-import pprint
 from django.core.management.base import BaseCommand, CommandError
-from silo.models import LabelValueStore, Silo
+from django.utils.encoding import smart_text, smart_str
+from django.conf import settings
 import pymongo
 from bson.objectid import ObjectId
-from django.conf import settings
 import json
 import random
-
+from silo.models import LabelValueStore, Silo
 
 
 class Command(BaseCommand):
@@ -52,9 +51,9 @@ class Command(BaseCommand):
                     # print all diffs to console and save some samples for later
                     diff = 'silo %s: different new=|%s| old=|%s|, key=%s, _id=%s' % \
                         (record['silo_id'],
-                        unicode.encode(newVal,'utf-8'),
-                        unicode.encode(record[key], 'utf-8'),
-                        unicode.encode(key, 'utf-8'),
+                        smart_str(newVal),
+                        smart_str(record[key]),
+                        smart_str(key),
                         record['_id'])
                     print diff
                     if (random.random() > .99 and len(diffSamples) <=15) \
@@ -94,18 +93,17 @@ class Command(BaseCommand):
         print '\n#########################################'
         print '#########################################'
         print ''
-        print 'Records count before', rCountBefore
-        print 'Records count after', db.label_value_store.count()
-        print '\n%s records examined' % counter
-        print '%s silos with extra whitespace:' % len(foundSilos)
-        print ', '.join(sorted([str(i) for i in foundSilos]))
-        print '\n%s records updated' % len(recordsUpdated)
-        print '\nMultimods (hopefully empty):', multiMod
-
         print '\nDiff samples:'
         print '\n'.join(diffSamples)
         print ''
-
+        print 'Records count before', rCountBefore
+        print 'Records count after', db.label_value_store.count()
+        print '\n%s records examined\n' % counter
+        print '%s silos with extra whitespace:' % len(foundSilos)
+        print ', '.join(sorted([str(i) for i in foundSilos]))
+        print '\nMultimods (hopefully empty):', multiMod
+        print ''
+        print '%s records updated.  If value is 0 you may not have used the --write option.\n' % len(recordsUpdated)
         if len(problemSilos) > 0:
             print "These silos had extra whitespace and are on the auto-push list:"
             for silo in problemSilos:
