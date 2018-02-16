@@ -288,16 +288,38 @@
             // Create and render a Picker object for picking user Photos.
             function createPicker() {
                 if (pickerApiLoaded && oauthToken) {
-                    var view = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS);
-                    view.setIncludeFolders(true);
-                    view.setOwnedByMe(true);
-                    view.setSelectFolderEnabled(false);
-                    view.setMode("DocsViewMode.LIST");
+                    var myView = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS);
+                    myView.setIncludeFolders(true);
+                    myView.setOwnedByMe(true);
+                    myView.setSelectFolderEnabled(false);
+                    myView.setMode("DocsViewMode.LIST");
+
+                    var teamView = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS);
+                    teamView.setIncludeFolders(true);
+                    teamView.setOwnedByMe(true);
+                    teamView.setSelectFolderEnabled(false);
+                    teamView.setMode("DocsViewMode.LIST");
+                    teamView.setEnableTeamDrives(true);
+
                     var picker = new google.picker.PickerBuilder()
                         .setOrigin(window.location.protocol + '//' + window.location.host)
                         //.setOrigin('https://localhost:8000')
-                        .enableFeature(google.picker.Feature.NAV_HIDDEN)
-                        .addView(view)
+                        // .enableFeature(google.picker.Feature.NAV_HIDDEN)
+                        .enableFeature(google.picker.Feature.SUPPORT_TEAM_DRIVES)
+                        // .addViewGroup(
+                        //   new google.picker.ViewGroup(google.picker.ViewId.DOCS)
+                        //   .addView(myView)
+                        //   .addLabel("My Drive")
+                        // )
+                        //
+                        // .addViewGroup(
+                        //   new google.picker.ViewGroup(google.picker.ViewId.DOCS)
+                        //   .addView(teamView)
+                        //   .addLabel("Team Drive")
+                        // )
+
+                        .addView(myView)
+                        .addView(teamView)
                         .setOAuthToken(oauthToken)
                         .setDeveloperKey(developerKey)
                         .setCallback(pickerCallback)
