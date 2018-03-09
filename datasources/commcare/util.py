@@ -1,8 +1,8 @@
 
 from silo.models import Read, ReadType
 from django.contrib import messages
-
 import json
+import requests
 
 from celery import group
 
@@ -13,6 +13,7 @@ from tola.util import saveDataToSilo, addColsToSilo, hideSiloColumns
 from pymongo import MongoClient
 from django.conf import settings
 
+
 #this gets a list of projects that users have used in the past to import data from commcare
 #used in commcare/forms.py
 def getProjects(user_id):
@@ -22,7 +23,19 @@ def getProjects(user_id):
         projects.append(read.read_url.split('/')[4])
     return list(set(projects))
 
-def getCommCareCaseData(domain, auth, auth_header, total_cases, silo, read):
+
+#get a list of reports available to the user
+def getCommCareReportIDs(project_name, header):
+    url = 'https://www.commcarehq.org/a/%s/api/v0.5/simplereportconfiguration/?format=JSON' % project_name
+    response = requests.get(url, headers=header)
+    response_data = json.loads(response.content)
+    report_ids = {}
+    for rpt_info in response_data['objects']:
+        report_ids[rpt_info['id']] = rpt_info['title']
+    return report_ids
+
+
+def getCommCareCaseData(url, auth, auth_header, total_cases, silo, read, commcare_report_name):
     """
     Use fetch and request CommCareData to store all of the case data
 
@@ -34,52 +47,26 @@ def getCommCareCaseData(domain, auth, auth_header, total_cases, silo, read):
     read -- read that the data is apart of
     """
 
-
-    RECORDS_PER_REQUEST = 100
-    base_url = "https://www.commcarehq.org/a/"+ domain\
-                +"/api/v0.5/case/?format=JSON&limit="+str(RECORDS_PER_REQUEST)
+    if commcare_report_name:
+        record_limit = 50
+    else:
+        record_limit = 100
+    # check if there are already parameters on the url
+    if '?' in url:
+        base_url = url + "&limit=" + str(record_limit)
+    else:
+        base_url = url + "?limit=" + str(record_limit)
 
     data_raw = fetchCommCareData(base_url, auth, auth_header,\
-                    0, total_cases, RECORDS_PER_REQUEST, silo.id, read.id)
+                    0, total_cases, record_limit, silo.id, read.id, commcare_report_name)
     data_collects = data_raw.apply_async()
     data_retrieval = [v.get() for v in data_collects]
     columns = set()
     for data in data_retrieval:
         columns = columns.union(data)
-    #correct the columns
-    for column in columns:
-        if "." in column:
-            columns.remove(column)
-            columns.add(column.replace(".", "_"))
-        if "$" in column:
-            columns.remove(column)
-            columns.add(column.replace("$", "USD"))
-    try: columns.remove("")
-    except KeyError as e: pass
-    try: columns.remove("silo_id")
-    except KeyError as e: pass
-    try: columns.remove("read_id")
-    except KeyError as e: pass
-    try:
-        columns.remove("id")
-        columns.add("user_assigned_id")
-    except KeyError as e: pass
-    try:
-        columns.remove("_id")
-        columns.add("user_assigned_id")
-    except KeyError as e: pass
-    try:
-        columns.remove("edit_date")
-        columns.add("editted_date")
-    except KeyError as e: pass
-    try:
-        columns.remove("create_date")
-        columns.add("created_date")
-    except KeyError as e: pass
 
     #add new columns to the list of current columns this is slower because
     #order has to be maintained (2n instead of n)
     addColsToSilo(silo, columns)
     hideSiloColumns(silo, ["case_id"])
-
     return (messages.SUCCESS, "CommCare cases imported successfully", columns)

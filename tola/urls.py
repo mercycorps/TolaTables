@@ -47,7 +47,6 @@ router.register(r'organization', OrganizationViewSet)
 router.register(r'workflowlevel1', WorkflowLevel1ViewSet)
 router.register(r'workflowlevel2', WorkflowLevel2ViewSet)
 
-
 urlpatterns =[
     url(r'^api/', include(router.urls)),
     url(r'^api-auth/', include('rest_framework.urls', namespace='rest_framework')),
@@ -55,7 +54,6 @@ urlpatterns =[
 
     url(r'^admin/', include(admin.site.urls)),
     url(r'^$', views.index, name='index'),
-
 
     url(r'^source/new/', views.showRead, kwargs={'id': 0}, name='newRead'),
     url(r'^onedrive', views.oneDrive, name='oneDriveRedirect'),

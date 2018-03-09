@@ -254,3 +254,10 @@ body > .container {
 .dataTables_paginate {
     padding: 10px 10px 0px 12px;
 }
+
+/* Commcare Import Form */
+
+/* Start hidden, unhide of they indicate they are importing forms */
+#div_id_commcare_report_name {
+  display: none;
+}

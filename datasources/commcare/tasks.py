@@ -9,7 +9,7 @@ from django.conf import settings
 from pymongo import MongoClient
 from pymongo.operations import UpdateMany
 
-from tola.util import getColToTypeDict
+from tola.util import getColToTypeDict, cleanKey
 from silo.models import Silo
 
 import requests
@@ -17,7 +17,7 @@ import json
 import time
 
 @shared_task(trail=True)
-def fetchCommCareData(url, auth, auth_header, start, end, step, silo_id, read_id, update=False) :
+def fetchCommCareData(url, auth, auth_header, start, end, step, silo_id, read_id, report_name, update=False) :
     """
     This function will call the appointed functions to retrieve the commcare data
 
@@ -28,12 +28,15 @@ def fetchCommCareData(url, auth, auth_header, start, end, step, silo_id, read_id
     end -- what record to end at
     step -- # of records to get in one request
     update -- if true use the update functioality instead of the regular store furnctionality
+    form -- if None download case data, otherwise download form data and save only specified form
     """
-    return group(requestCommCareData.s(url, offset, auth, auth_header, silo_id, read_id, update) \
+    print 'hey look url, auth, auth_header start, end, step, form', url, auth, auth_header, start, end, step, silo_id, read_id, report_name, update
+    return group(requestCommCareData.s(url, offset, auth, auth_header, silo_id, read_id, report_name, update, 0) \
             for offset in xrange(start,end,step))
 
+
 @shared_task(trail=True)
-def requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, update):
+def requestCommCareData(base_url, offset, auth, auth_header, silo_id, read_id, report_name, update, req_count):
     """
     This function will retrieve the appointed page of commcare data and return the data in an array
 
@@ -42,7 +45,12 @@ def requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, update
     auth -- the authorization required
     auth_header -- True = use Header, False = use Digest authorization
     """
-    url = url + "&offset=" + str(offset)
+
+    MAX_RETRIES = 4
+    print 'oh my gosh'
+    url = base_url + "&offset=" + str(offset)
+    print 'built url', url
+
     if auth_header:
         response = requests.get(url, headers=auth)
     else:
@@ -50,22 +58,36 @@ def requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, update
     if response.status_code == 200:
         data = json.loads(response.content)
     elif response.status_code == 429:
-        time.sleep(1)
-        return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, update)
+        if req_count > MAX_RETRIES:
+            raise ConnectionRefusedError
+        else:
+            time.sleep(1)
+            req_count += 1
+            return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, report_name, update, req_count)
     elif response.status_code == 404:
         raise URLNotFoundError(url)
     else:
-        #add something to this future error code stopping everything with throw exception
-        time.sleep(1)
-        return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, update)
+        if req_count > MAX_RETRIES:
+            raise ConnectionRefusedError
+        else:
+            #add something to this future error code stopping everything with throw exception
+            time.sleep(1)
+            print 'sleepytime'
+            req_count += 1
+            print "comeonnnn"
+            return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, report_name, update)
 
-    #now get the properties of each data
-    return parseCommCareData(data['objects'], silo_id, read_id, update)
+    # Now get the properties of each data. Process form data and case data differently.
+    if report_name:
+        print 'just checkoung', data
+        return parseCommCareReportData(data, silo_id, read_id, update, report_name)
+    else:
+        return parseCommCareCaseData(data['objects'], silo_id, read_id, update)
 
 
 
 @shared_task()
-def parseCommCareData(data, silo_id, read_id, update):
+def parseCommCareCaseData(data, silo_id, read_id, update):
     data_properties = []
     data_columns = set()
     for entry in data:
@@ -76,6 +98,43 @@ def parseCommCareData(data, silo_id, read_id, update):
         data_columns.update(entry['properties'].keys())
     storeCommCareData(data_properties, silo_id, read_id, update)
     return list(data_columns)
+
+@shared_task()
+def parseCommCareFormData(data, silo_id, read_id, update, form):
+    exclude_tags = ['case', 'meta']
+    data_properties = []
+    data_columns = set()
+    for entry in data:
+        filtered_data = {}
+        for form_key in entry['objects']['form'].keys():
+            if form_key in exclude_tags or form_key[:1] in ['#', '@']:
+                continue
+            filtered_data.update(entry['objects']['form'][form_key])
+        data_properties.append(filtered_data)
+        data_columns.update(filtered_data.keys())
+        print 'data columns', data_columns
+    storeCommCareData(data_properties, silo_id, read_id, update)
+    return list(data_columns)
+
+@shared_task()
+def parseCommCareReportData(data, silo_id, read_id, update, report_name):
+    print 'in report data'
+    data_properties = []
+    data_columns = set()
+    column_mapper = {}
+    for c in data['columns']:
+        column_mapper[c['slug']] = c['header']
+    print 'colmapper', column_mapper
+
+    for row in data['data']:
+        renamed_row = dict((column_mapper[col], row[col]) for col in row)
+        print 'renameeed data', renamed_row
+        data_properties.append(renamed_row)
+
+    data_columns = column_mapper.values()
+    storeCommCareData(data_properties, silo_id, read_id, update)
+    return data_columns
+
 
 @shared_task()
 def storeCommCareData(data, silo_id, read_id, update):
@@ -101,24 +160,7 @@ def storeCommCareData(data, silo_id, read_id, update):
                     # skip this one
                     # add message that this is skipped
                     continue
-            row[column.replace(".", "_").replace("$", "USD")] = row.pop(column)
-        try: row.pop("")
-        except KeyError as e: pass
-        try: row.pop("silo_id")
-        except KeyError as e: pass
-        try: row.pop("read_id")
-        except KeyError as e: pass
-        try: row["user_assigned_id"] = row.pop("id")
-        except KeyError as e: pass
-        try: row["user_assigned_id"] = row.pop("_id")
-        except KeyError as e: pass
-        try: row["editted_date"] = row.pop("edit_date")
-        except KeyError as e: pass
-        try: row["created_date"] = row.pop("create_date")
-        except KeyError as e: pass
-        row["silo_id"] = silo_id
-        row["read_id"] = read_id
-
+            row[cleanKey(column)] = row.pop(column)
 
         data_refined.append(row)
 

@@ -5,24 +5,19 @@
 
 {% block content %}
 
-    {% if not data %}
-        <img src="{{ STATIC_URL }}/img/commcare_logo_white.png">
-        <p>Get access to your commcare data:</p>
-        {% crispy form %}
-        {% if auth == 1%} <!-- link to password -->
-          <p>If you wish to instead login using your password click <a href="/commcare/passform/">here</a>. This will not save your login information for next time and prevent Tola from being able to update your table. </p>
-        {% elif auth == 2 %} <!-- link to authorization -->
-          <!-- <p>If you wish to instead login using your authorization token click <a href="/commcare/">here</a>. This will not save your login information for next time and prevent Tola from being able to update your table. </p> -->
-        {% else %} <!-- link to logout -->
-          <p> You can also <a href="/commcare/logout/">Logout</a> of this CommCare account. </p>
-        {% endif %}
-    {% else %}
-      <!-- obsolete. this will be used as a basis for column operations form -->
-      <p>You can also do operations on these forms. These operations will allows you to delete data if certain conditions are not met. </p>
-      {% for col in data %}
-        <p> {{col}} </p>
-      {% endfor %}
+
+    <img src="{{ STATIC_URL }}/img/commcare_logo_white.png">
+    <p>Get access to your commcare data:</p>
+    {% crispy form %}
+    {% if auth == 1%} <!-- link to password -->
+      <p>If you wish to instead login using your password click <a href="/commcare/passform/">here</a>. This will not save your login information for next time and prevent Tola from being able to update your table. </p>
+    {% elif auth == 2 %} <!-- link to authorization -->
+      <!-- <p>If you wish to instead login using your authorization token click <a href="/commcare/">here</a>. This will not save your login information for next time and prevent Tola from being able to update your table. </p> -->
+    {% else %} <!-- link to logout -->
+      <p> You can also <a href="/commcare/logout/">Logout</a> of this CommCare account. </p>
     {% endif %}
+
+
     <!-- Modal -->
     <div id="progress_modal" class="modal fade" role="dialog">
       <div class="modal-dialog">
@@ -48,7 +43,7 @@
     <script type="text/javascript">
         $(document).ready(function() {
             //This jquery function controls the dropdown menu in crispy_forms
-            $("select").on("change", function() {
+            $('select[id="id_silo"]').on("change", function() {
                 var select_obj = $("#" + this.id);
                 var silo_id =  select_obj.val();
                 if (silo_id < 0) {
@@ -65,33 +60,71 @@
                 }
             });
 
-            //This jquery function controls the progress bar on the import screen
-            $('form[action="/commcare/"]').submit(function(e){
-                // $("#progress_modal").modal();
-                $("#progress_number").text(0+"/{{entries}} downloaded");
-                $("#progress_modal").modal();
-                // getSiloIdFromRead();
-                // getNumEntry();
-                // controls the progress bar
-                $(".progress-bar").animate({
-                    width: "100%"
-                }, {{entries}}*500);
+            $('input[id="id_project"]').on("change", function() {
+                console.log('projvalue = ', $('#' + this.id).val());
+                url = '/commcare/report_names/?project=';
+                url += $('#' + this.id).val();
+
+                $.ajax({
+                    url: url,
+                    type: "GET",
+                    // headers: headers,
+                    dataType: "JSON",
+                    complete: function(data, status) {
+                        if (status == "success") {
+                            console.log('thisis data', data.responseJSON)
+                            var options = [];
+                            $.each(data.responseJSON, function (id, name) {
+                                options.push('<option value=' + id + '>' + name + '</option>');
+                            });
+                            console.log('tablenames', options);
+                            $('#id_commcare_report_name').html(options.join('\n'));
+                        } else {
+                            console.log("something weird happened");
+                        }
+                    }
+                });
             });
 
-            //This jquery function controls the progress bar on the import from password screen
-            $('form[action="/commcare/passform/"]').submit(function(e){
-                // $("#progress_modal").modal();
-                $("#progress_number").text(0+"/{{entries}} downloaded");
-                $("#progress_modal").modal();
-                // getSiloIdFromRead();
-                // getNumEntry();
-                // controls the progress bar
-                $(".progress-bar").animate({
-                    width: "100%"
-                }, {{entries}}*500);
-            });
+
+            // //This jquery function controls the progress bar on the import screen
+            // $('form[action="/commcare/"]').submit(function(e){
+            //     // $("#progress_modal").modal();
+            //     $("#progress_number").text(0+"/{{entries}} downloaded");
+            //     $("#progress_modal").modal();
+            //     // getSiloIdFromRead();
+            //     // getNumEntry();
+            //     // controls the progress bar
+            //     $(".progress-bar").animate({
+            //         width: "100%"
+            //     }, {{entries}}*500);
+            // });
+            //
+            // //This jquery function controls the progress bar on the import from password screen
+            // $('form[action="/commcare/passform/"]').submit(function(e){
+            //     // $("#progress_modal").modal();
+            //     $("#progress_number").text(0+"/{{entries}} downloaded");
+            //     $("#progress_modal").modal();
+            //     // getSiloIdFromRead();
+            //     // getNumEntry();
+            //     // controls the progress bar
+            //     $(".progress-bar").animate({
+            //         width: "100%"
+            //     }, {{entries}}*500);
+            // });
 
         });
+
+        $("input[type=radio][name=download_type]").on("change", function(){
+            console.log('yup', this.value)
+            if (this.value == 'commcare_report'){
+                $("#div_id_commcare_report_name").css("display", "inherit");
+            }
+            else {
+              $("#div_id_commcare_report_name").css("display", "none");
+            }
+        });
+
 
         // this does it
         // to impliment # of imports left
