@@ -1,7 +1,6 @@
 
 from silo.models import Read, ReadType
 from django.contrib import messages
-
 import json
 
 from celery import group
@@ -13,6 +12,7 @@ from tola.util import saveDataToSilo, addColsToSilo, hideSiloColumns
 from pymongo import MongoClient
 from django.conf import settings
 
+
 #this gets a list of projects that users have used in the past to import data from commcare
 #used in commcare/forms.py
 def getProjects(user_id):
@@ -22,7 +22,7 @@ def getProjects(user_id):
         projects.append(read.read_url.split('/')[4])
     return list(set(projects))
 
-def getCommCareCaseData(domain, auth, auth_header, total_cases, silo, read):
+def getCommCareCaseData(url, auth, auth_header, total_cases, silo, read, form):
     """
     Use fetch and request CommCareData to store all of the case data
 
@@ -34,13 +34,16 @@ def getCommCareCaseData(domain, auth, auth_header, total_cases, silo, read):
     read -- read that the data is apart of
     """
 
-
     RECORDS_PER_REQUEST = 100
-    base_url = "https://www.commcarehq.org/a/"+ domain\
-                +"/api/v0.5/case/?format=JSON&limit="+str(RECORDS_PER_REQUEST)
+
+    # check if there are already parameters on the url
+    if '?' in url:
+        base_url = url + "&limit=" + str(RECORDS_PER_REQUEST)
+    else:
+        base_url = url + "?limit=" + str(RECORDS_PER_REQUEST)
 
     data_raw = fetchCommCareData(base_url, auth, auth_header,\
-                    0, total_cases, RECORDS_PER_REQUEST, silo.id, read.id)
+                    0, total_cases, RECORDS_PER_REQUEST, silo.id, read.id, form)
     data_collects = data_raw.apply_async()
     data_retrieval = [v.get() for v in data_collects]
     columns = set()
@@ -81,5 +84,4 @@ def getCommCareCaseData(domain, auth, auth_header, total_cases, silo, read):
     #order has to be maintained (2n instead of n)
     addColsToSilo(silo, columns)
     hideSiloColumns(silo, ["case_id"])
-
     return (messages.SUCCESS, "CommCare cases imported successfully", columns)

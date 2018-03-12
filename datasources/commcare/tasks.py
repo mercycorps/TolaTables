@@ -17,7 +17,7 @@ import json
 import time
 
 @shared_task(trail=True)
-def fetchCommCareData(url, auth, auth_header, start, end, step, silo_id, read_id, update=False) :
+def fetchCommCareData(url, auth, auth_header, start, end, step, silo_id, read_id, form, update=False) :
     """
     This function will call the appointed functions to retrieve the commcare data
 
@@ -28,12 +28,14 @@ def fetchCommCareData(url, auth, auth_header, start, end, step, silo_id, read_id
     end -- what record to end at
     step -- # of records to get in one request
     update -- if true use the update functioality instead of the regular store furnctionality
+    form -- if None download case data, otherwise download form data and save only specified form
     """
-    return group(requestCommCareData.s(url, offset, auth, auth_header, silo_id, read_id, update) \
+    print 'hey look url, start, end, step, form', url, start, end, step, form
+    return group(requestCommCareData.s(url, offset, auth, auth_header, silo_id, read_id, form, update) \
             for offset in xrange(start,end,step))
 
 @shared_task(trail=True)
-def requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, update):
+def requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, form, update):
     """
     This function will retrieve the appointed page of commcare data and return the data in an array
 
@@ -42,7 +44,9 @@ def requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, update
     auth -- the authorization required
     auth_header -- True = use Header, False = use Digest authorization
     """
+    print 'oh my gosh'
     url = url + "&offset=" + str(offset)
+    print 'built url', url
     if auth_header:
         response = requests.get(url, headers=auth)
     else:
@@ -51,21 +55,25 @@ def requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, update
         data = json.loads(response.content)
     elif response.status_code == 429:
         time.sleep(1)
-        return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, update)
+        return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, form, update)
     elif response.status_code == 404:
         raise URLNotFoundError(url)
     else:
         #add something to this future error code stopping everything with throw exception
         time.sleep(1)
-        return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, update)
+        return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, form, update)
 
-    #now get the properties of each data
-    return parseCommCareData(data['objects'], silo_id, read_id, update)
+    # Now get the properties of each data. Process form data and case data differently.
+    if form:
+        print 'just checkoung', data
+        return parseCommCareFormData(data['objects']['form'], silo_id, read_id, update, form)
+    else:
+        return parseCommCareCaseData(data['objects'], silo_id, read_id, update)
 
 
 
 @shared_task()
-def parseCommCareData(data, silo_id, read_id, update):
+def parseCommCareCaseData(data, silo_id, read_id, update):
     data_properties = []
     data_columns = set()
     for entry in data:
@@ -76,6 +84,24 @@ def parseCommCareData(data, silo_id, read_id, update):
         data_columns.update(entry['properties'].keys())
     storeCommCareData(data_properties, silo_id, read_id, update)
     return list(data_columns)
+
+@shared_task()
+def parseCommCareFormData(data, silo_id, read_id, update, form):
+    exclude_tags = ['case', 'meta']
+    data_properties = []
+    data_columns = set()
+    for entry in data:
+        filtered_data = {}
+        for form_key in entry['objects']['form'].keys():
+            if form_key in exclude_tags or form_key[:1] in ['#', '@']:
+                continue
+            filtered_data.update(entry['objects']['form'][form_key])
+        data_properties.append(filtered_data)
+        data_columns.update(filtered_data.keys())
+        print 'data columns', data_columns
+    storeCommCareData(data_properties, silo_id, read_id, update)
+    return list(data_columns)
+
 
 @shared_task()
 def storeCommCareData(data, silo_id, read_id, update):

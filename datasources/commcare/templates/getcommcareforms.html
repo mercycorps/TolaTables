@@ -89,11 +89,12 @@
         });
 
         $("input[type=radio][name=download_type]").on("change", function(){
-            if (this.value == 'forms'){
-                $("#div_id_form_name").css("display", "inherit");
+            console.log('yup', this.value)
+            if (this.value == 'commcare_form'){
+                $("#div_id_commcare_form_name").css("display", "inherit");
             }
             else {
-              $("#div_id_form_name").css("display", "none");
+              $("#div_id_commcare_form_name").css("display", "none");
             }
         });
         // this does it

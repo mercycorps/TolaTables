@@ -1,5 +1,6 @@
 import json
 import requests
+import urllib
 import base64
 
 from requests.auth import HTTPDigestAuth
@@ -29,9 +30,7 @@ def getCommCareAuth(request):
     cols = []
     form = None
     provider = "CommCare"
-
     auth = 1
-    url = 'https://www.commcarehq.org/a/{project}/api/v0.5/{type}/?format=JSON&limit=1'
     project = None
     silos = Silo.objects.filter(owner=request.user)
     silo_choices = [(0, ""), (-1, "Create new silo")]
@@ -43,6 +42,7 @@ def getCommCareAuth(request):
     if request.method == 'POST':
         #their exists a project and authorization so get the data
         form = CommCareProjectForm(request.POST, choices=silo_choices, user_id=user_id)
+        commcare_form = request.POST['commcare_form_name']
 
         if form.is_valid():
             try:
@@ -58,12 +58,24 @@ def getCommCareAuth(request):
                     commcare_token = ThirdPartyTokens.objects.get(user=request.user,name=provider)
 
                 project = request.POST['project']
-                dt = request.POST['download_type']
-                url = url.format(project=project, type=dt)
+                if request.POST['download_type'] == 'commcare_form':
+                    download_type = 'form'
+                    url_params = {}
+                else:
+                    download_type = 'case'
+                    url_params = {'format': 'JSON'}
+                url_params['limit'] = 1
+                #https://www.commcarehq.org/a/[PROJECT]/api/v0.5/simplereportconfiguration/?format=json
+
+                url = 'https://www.commcarehq.org/a/{project}/api/v0.5/{type}/?{params}'
+                url = url.format(
+                    project=project,
+                    type=download_type,
+                    params=urllib.urlencode(url_params)
+                )
                 headers = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
                 response = requests.get(url, headers=headers)
                 if response.status_code == 401:
-                    print '401 error'
                     messages.error(request, "Invalid username, authorization token or project.")
                     try:
                         token = ThirdPartyTokens.objects.get(user=request.user, name="CommCare")
@@ -72,7 +84,6 @@ def getCommCareAuth(request):
                         pass
                     form = CommCareAuthForm(choices=silo_choices, user_id=user_id)
                 elif response.status_code == 200:
-                    print '200 success'
                     response_data = json.loads(response.content)
                     total_cases = response_data.get('meta').get('total_count')
                     if created: commcare_token.save()
@@ -100,7 +111,7 @@ def getCommCareAuth(request):
 
                     #get the actual data
                     authorization = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
-                    ret = getCommCareCaseData(project, authorization, True, total_cases, silo, read)
+                    ret = getCommCareCaseData(url, authorization, True, total_cases, silo, read, commcare_form)
                     messages.add_message(request,ret[0],ret[1])
                     #need to impliment if import faluire
                     cols = ret[2]
