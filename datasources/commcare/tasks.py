@@ -47,6 +47,7 @@ def requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, form, 
     print 'oh my gosh'
     url = url + "&offset=" + str(offset)
     print 'built url', url
+    return
     if auth_header:
         response = requests.get(url, headers=auth)
     else:
