@@ -225,7 +225,7 @@ def getCommCareData(request):
                         break
 
                 url = base_url % (project, 'configurablereportdata')
-                url = url + report_id + '?limit=1&format=JSON'
+                url = url + report_id + '?format=JSON&limit=1'
                 print 'this is the ultra new url', url
                 response = requests.get(url, headers=auth_header)
                 response_data = json.loads(response.content)
@@ -238,8 +238,8 @@ def getCommCareData(request):
 
             # need to redo the url if downloading a reports
 
-            url.replace('&limit=1', '')
-            print 'new url', url
+            url = url.replace('&limit=1', '')
+            print 'penultimate url', url
 
             if report_name:
                 read_name = '%s report - %s' % (project, report_name)
@@ -256,7 +256,7 @@ def getCommCareData(request):
                 silo.reads.add(read)
             elif read not in silo.reads.all():
                 silo.reads.add(read)
-            print 'he look commcare form', request.POST['commcare_report_name']
+            print 'hey look commcare form', request.POST['commcare_report_name']
             #get the actual data
             ret = getCommCareCaseData(url, auth_header, True, total_cases, silo, read, request.POST['commcare_report_name'])
             messages.add_message(request,ret[0],ret[1])

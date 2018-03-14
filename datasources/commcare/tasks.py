@@ -17,7 +17,7 @@ import json
 import time
 
 @shared_task(trail=True)
-def fetchCommCareData(url, auth, auth_header, start, end, step, silo_id, read_id, form, update=False) :
+def fetchCommCareData(url, auth, auth_header, start, end, step, silo_id, read_id, report_name, update=False) :
     """
     This function will call the appointed functions to retrieve the commcare data
 
@@ -30,12 +30,13 @@ def fetchCommCareData(url, auth, auth_header, start, end, step, silo_id, read_id
     update -- if true use the update functioality instead of the regular store furnctionality
     form -- if None download case data, otherwise download form data and save only specified form
     """
-    print 'hey look url, start, end, step, form', url, start, end, step, form
-    return group(requestCommCareData.s(url, offset, auth, auth_header, silo_id, read_id, form, update) \
+    print 'hey look url, auth, auth_header start, end, step, form', url, auth, auth_header, start, end, step, silo_id, read_id, report_name, update
+    return group(requestCommCareData.s(url, offset, auth, auth_header, silo_id, read_id, report_name, update, 0) \
             for offset in xrange(start,end,step))
 
+
 @shared_task(trail=True)
-def requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, form, update):
+def requestCommCareData(base_url, offset, auth, auth_header, silo_id, read_id, report_name, update, req_count):
     """
     This function will retrieve the appointed page of commcare data and return the data in an array
 
@@ -44,10 +45,12 @@ def requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, form, 
     auth -- the authorization required
     auth_header -- True = use Header, False = use Digest authorization
     """
+
+    MAX_RETRIES = 4
     print 'oh my gosh'
-    url = url + "&offset=" + str(offset)
+    url = base_url + "&offset=" + str(offset)
     print 'built url', url
-    return
+
     if auth_header:
         response = requests.get(url, headers=auth)
     else:
@@ -55,19 +58,29 @@ def requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, form, 
     if response.status_code == 200:
         data = json.loads(response.content)
     elif response.status_code == 429:
-        time.sleep(1)
-        return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, form, update)
+        if req_count > MAX_RETRIES:
+            raise ConnectionRefusedError
+        else:
+            time.sleep(1)
+            req_count += 1
+            return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, report_name, update, req_count)
     elif response.status_code == 404:
         raise URLNotFoundError(url)
     else:
-        #add something to this future error code stopping everything with throw exception
-        time.sleep(1)
-        return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, form, update)
+        if req_count > MAX_RETRIES:
+            raise ConnectionRefusedError
+        else:
+            #add something to this future error code stopping everything with throw exception
+            time.sleep(1)
+            print 'sleepytime'
+            req_count += 1
+            print "comeonnnn"
+            return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, report_name, update)
 
     # Now get the properties of each data. Process form data and case data differently.
-    if form:
+    if report_name:
         print 'just checkoung', data
-        return parseCommCareFormData(data['objects']['form'], silo_id, read_id, update, form)
+        return parseCommCareReportData(data, silo_id, read_id, update, report_name)
     else:
         return parseCommCareCaseData(data['objects'], silo_id, read_id, update)
 
@@ -102,6 +115,25 @@ def parseCommCareFormData(data, silo_id, read_id, update, form):
         print 'data columns', data_columns
     storeCommCareData(data_properties, silo_id, read_id, update)
     return list(data_columns)
+
+@shared_task()
+def parseCommCareReportData(data, silo_id, read_id, update, report_name):
+    print 'in report data'
+    data_properties = []
+    data_columns = set()
+    column_mapper = {}
+    for c in data['columns']:
+        column_mapper[c['slug']] = c['header']
+    print 'colmapper', column_mapper
+
+    for row in data['data']:
+        renamed_row = dict((column_mapper[col], row[col]) for col in row)
+        print 'renameeed data', renamed_row
+        data_properties.append(renamed_row)
+
+    data_columns = column_mapper.values()
+    storeCommCareData(data_properties, silo_id, read_id, update)
+    return data_columns
 
 
 @shared_task()

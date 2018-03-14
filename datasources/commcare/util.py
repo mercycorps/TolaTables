@@ -22,7 +22,7 @@ def getProjects(user_id):
         projects.append(read.read_url.split('/')[4])
     return list(set(projects))
 
-def getCommCareCaseData(url, auth, auth_header, total_cases, silo, read, form):
+def getCommCareCaseData(url, auth, auth_header, total_cases, silo, read, commcare_report_name):
     """
     Use fetch and request CommCareData to store all of the case data
 
@@ -34,16 +34,19 @@ def getCommCareCaseData(url, auth, auth_header, total_cases, silo, read, form):
     read -- read that the data is apart of
     """
 
-    RECORDS_PER_REQUEST = 100
-
+    if commcare_report_name:
+        record_limit = 50
+    else:
+        record_limit = 100
+    print 'ingetcommcarecasedata'
     # check if there are already parameters on the url
     if '?' in url:
-        base_url = url + "&limit=" + str(RECORDS_PER_REQUEST)
+        base_url = url + "&limit=" + str(record_limit)
     else:
-        base_url = url + "?limit=" + str(RECORDS_PER_REQUEST)
+        base_url = url + "?limit=" + str(record_limit)
 
     data_raw = fetchCommCareData(base_url, auth, auth_header,\
-                    0, total_cases, RECORDS_PER_REQUEST, silo.id, read.id, form)
+                    0, total_cases, record_limit, silo.id, read.id, commcare_report_name)
     data_collects = data_raw.apply_async()
     data_retrieval = [v.get() for v in data_collects]
     columns = set()
