@@ -52,7 +52,9 @@ def getCommCareAuth(request):
                     username = request.POST['username']
                 )
                 commcare_token.save()
-                return redirect('getCommCareData')
+                redirect_url = reverse('getCommCareData') + '?project=%s' % request.POST['project']
+                print 'rdirurl', redirect_url
+                return redirect(redirect_url)
         else:
             messages.error(request, "You have invalid values in your form. Please try again.")
             return render(request, 'getCommCareAuth', {'form': form})
@@ -271,9 +273,14 @@ def getCommCareData(request):
     else:
         print 'ok maybe here'
         user_id = request.user.id
-
-
-        form = CommCareProjectForm(user_id=user_id, silo_choices=silo_choices)
+        form = CommCareProjectForm(
+            user_id = user_id,
+            silo_choices = silo_choices,
+        )
+        try:
+            form.fields['project'].initial = request.GET.get('project')
+        except:
+            pass
         return render(request, 'getcommcareforms.html', {'form': form})
 
 

@@ -74,6 +74,7 @@ class CommCareProjectForm(forms.Form):
         self.helper.add_input(Submit('submit', 'Submit'))
         self.helper.add_input(Reset('rest', 'Reset', css_class='btn-warning'))
         super(CommCareProjectForm, self).__init__(*args, **kwargs)
+        
         self.fields['project'].widget = ListTextWidget(data_list=getProjects(user_id), name='projects')
         self.fields['silo'].choices = silo_choices
 
