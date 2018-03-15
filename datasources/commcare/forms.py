@@ -1,14 +1,18 @@
 from django.core.urlresolvers import reverse_lazy
+
 from django.forms import ModelForm
 from django import forms
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Div, Submit, Reset, HTML, Button, Row, Field, Hidden, Fieldset
 from crispy_forms.bootstrap import FormActions
 from django.forms.formsets import formset_factory
-
 from django.utils.safestring import mark_safe
 
+
+
+
 from .util import getProjects
+from silo.models import ThirdPartyTokens
 
 
 #diplaying a charfield that is also a list
@@ -61,8 +65,12 @@ class CommCareProjectForm(forms.Form):
     TYPE_CHOICES = [('commcare_report', 'Report'), ('cases', 'Cases')]
     download_type = forms.ChoiceField(choices=TYPE_CHOICES, widget=forms.RadioSelect())
     commcare_report_name = forms.CharField(required=False)
+    commcare_token = forms.CharField(required=False, max_length=100, widget=forms.HiddenInput())
+
 
     def __init__(self, *args, **kwargs):
+        import json
+        from django.core.serializers.json import DjangoJSONEncoder
         silo_choices = kwargs.pop('silo_choices')
         user_id = kwargs.pop('user_id')
         self.helper = FormHelper()
@@ -74,9 +82,9 @@ class CommCareProjectForm(forms.Form):
         self.helper.add_input(Submit('submit', 'Submit'))
         self.helper.add_input(Reset('rest', 'Reset', css_class='btn-warning'))
         super(CommCareProjectForm, self).__init__(*args, **kwargs)
-        
         self.fields['project'].widget = ListTextWidget(data_list=getProjects(user_id), name='projects')
         self.fields['silo'].choices = silo_choices
+        self.fields['commcare_token'].initial = json.dumps(ThirdPartyTokens.objects.values_list('username', 'token').get(user_id=user_id, name='CommCare'), cls=DjangoJSONEncoder)
 
 
 
@@ -87,8 +95,6 @@ class CommCareAuthForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         print 'kwargs in authform', kwargs
-        # kwargs.pop('user_id')
-        # kwargs.pop('choices')
         self.helper = FormHelper()
         self.helper.add_input(Submit('submit', 'Submit'))
         super(CommCareAuthForm, self).__init__(*args, **kwargs)

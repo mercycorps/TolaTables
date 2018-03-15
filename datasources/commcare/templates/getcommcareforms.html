@@ -38,7 +38,7 @@
       </div>
     </div>
 {% endblock content %}
-<script>console.log('ohyeah')</script>
+
 {% block extra_js_in_body %}
     <script type="text/javascript">
         $(document).ready(function() {
@@ -60,6 +60,45 @@
                 }
             });
 
+            // $('input[id="id_project"]').on("change", function() {
+            //     console.log('projvalue = ', $('#' + this.id).val());
+            //     console.log ('tokenval', $('#id_commcare_token').val());
+            //     url = 'https://www.commcarehq.org/a/';
+            //     url += $('#' + this.id).val();
+            //     url += '/api/v0.5/simplereportconfiguration/?format=json';
+            //     var auth_values = JSON.parse($('#id_commcare_token').val());
+            //     var headers = "Authorization: ApiKey " + auth_values[0] + ":" + auth_values[1]
+            //     console.log('ihasheader', headers)
+            //
+            //     $.ajax({
+            //       url: url,
+            //       type: "GET",
+            //       headers: headers,
+            //       dataType: "JSON",
+            //       complete: function(data, status) {
+            //           if (status == "success") {
+            //
+            //               var tableNames = []
+            //               for (table in data.responseJSON["objects"]) {
+            //                   tableNames.push(table['title'])
+            //               }
+            //               console.log('tablenames', table_names)
+            //
+            //               // if (failed_agreements != undefined) {
+            //               //     createAlert("danger", data.responseJSON["status"], false);
+            //               //     buildHtmlTable(failed_agreements, "#failed_project_agreements_modal_body");
+            //               //     $("#failed_project_agreements_modal").modal('show');
+            //               // } else {
+            //               //     createAlert("success", data.responseJSON["status"], false);
+            //               // }
+            //           } else {
+            //               console.log("something weird happened");
+            //           }
+            //       }
+            //   });
+
+
+            });
             // //This jquery function controls the progress bar on the import screen
             // $('form[action="/commcare/"]').submit(function(e){
             //     // $("#progress_modal").modal();
@@ -97,6 +136,8 @@
               $("#div_id_commcare_report_name").css("display", "none");
             }
         });
+
+
         // this does it
         // to impliment # of imports left
         // function getSiloIdFromRead(){
