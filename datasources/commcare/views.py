@@ -271,7 +271,6 @@ def getCommCareData(request):
         return render(request, 'getcommcareforms.html', {'form': form})
 
     else:
-        print 'ok maybe here'
         user_id = request.user.id
         form = CommCareProjectForm(
             user_id = user_id,

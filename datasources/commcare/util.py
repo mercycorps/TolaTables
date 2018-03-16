@@ -38,7 +38,6 @@ def getCommCareCaseData(url, auth, auth_header, total_cases, silo, read, commcar
         record_limit = 50
     else:
         record_limit = 100
-    print 'ingetcommcarecasedata'
     # check if there are already parameters on the url
     if '?' in url:
         base_url = url + "&limit=" + str(record_limit)
@@ -52,36 +51,6 @@ def getCommCareCaseData(url, auth, auth_header, total_cases, silo, read, commcar
     columns = set()
     for data in data_retrieval:
         columns = columns.union(data)
-    #correct the columns
-    for column in columns:
-        if "." in column:
-            columns.remove(column)
-            columns.add(column.replace(".", "_"))
-        if "$" in column:
-            columns.remove(column)
-            columns.add(column.replace("$", "USD"))
-    try: columns.remove("")
-    except KeyError as e: pass
-    try: columns.remove("silo_id")
-    except KeyError as e: pass
-    try: columns.remove("read_id")
-    except KeyError as e: pass
-    try:
-        columns.remove("id")
-        columns.add("user_assigned_id")
-    except KeyError as e: pass
-    try:
-        columns.remove("_id")
-        columns.add("user_assigned_id")
-    except KeyError as e: pass
-    try:
-        columns.remove("edit_date")
-        columns.add("editted_date")
-    except KeyError as e: pass
-    try:
-        columns.remove("create_date")
-        columns.add("created_date")
-    except KeyError as e: pass
 
     #add new columns to the list of current columns this is slower because
     #order has to be maintained (2n instead of n)

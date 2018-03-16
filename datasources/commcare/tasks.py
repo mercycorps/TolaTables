@@ -9,7 +9,7 @@ from django.conf import settings
 from pymongo import MongoClient
 from pymongo.operations import UpdateMany
 
-from tola.util import getColToTypeDict
+from tola.util import getColToTypeDict, cleanKey
 from silo.models import Silo
 
 import requests
@@ -160,24 +160,7 @@ def storeCommCareData(data, silo_id, read_id, update):
                     # skip this one
                     # add message that this is skipped
                     continue
-            row[column.replace(".", "_").replace("$", "USD")] = row.pop(column)
-        try: row.pop("")
-        except KeyError as e: pass
-        try: row.pop("silo_id")
-        except KeyError as e: pass
-        try: row.pop("read_id")
-        except KeyError as e: pass
-        try: row["user_assigned_id"] = row.pop("id")
-        except KeyError as e: pass
-        try: row["user_assigned_id"] = row.pop("_id")
-        except KeyError as e: pass
-        try: row["editted_date"] = row.pop("edit_date")
-        except KeyError as e: pass
-        try: row["created_date"] = row.pop("create_date")
-        except KeyError as e: pass
-        row["silo_id"] = silo_id
-        row["read_id"] = read_id
-
+            row[cleanKey(column)] = row.pop(column)
 
         data_refined.append(row)
 
