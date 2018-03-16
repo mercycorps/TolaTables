@@ -2,6 +2,7 @@
 from silo.models import Read, ReadType
 from django.contrib import messages
 import json
+import requests
 
 from celery import group
 
@@ -21,6 +22,17 @@ def getProjects(user_id):
     for read in reads:
         projects.append(read.read_url.split('/')[4])
     return list(set(projects))
+
+#get a list of reports available to the user
+def getReportIDs(project_name, header):
+    url = 'https://www.commcarehq.org/a/%s/api/v0.5/simplereportconfiguration/?format=JSON' % project_name
+    response = requests.get(url, headers=header)
+    response_data = json.loads(response.content)
+    report_ids = {}
+    for rpt_info in response_data['objects']:
+        report_ids[rpt_info['id']] = rpt_info['title']
+    return report_ids
+
 
 def getCommCareCaseData(url, auth, auth_header, total_cases, silo, read, commcare_report_name):
     """

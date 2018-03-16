@@ -8,9 +8,6 @@ from crispy_forms.bootstrap import FormActions
 from django.forms.formsets import formset_factory
 from django.utils.safestring import mark_safe
 
-
-
-
 from .util import getProjects
 from silo.models import ThirdPartyTokens
 
@@ -84,6 +81,7 @@ class CommCareProjectForm(forms.Form):
         super(CommCareProjectForm, self).__init__(*args, **kwargs)
         self.fields['project'].widget = ListTextWidget(data_list=getProjects(user_id), name='projects')
         self.fields['silo'].choices = silo_choices
+        self.fields['silo'].label = 'Table'
         self.fields['commcare_token'].initial = json.dumps(ThirdPartyTokens.objects.values_list('username', 'token').get(user_id=user_id, name='CommCare'), cls=DjangoJSONEncoder)
 
 
