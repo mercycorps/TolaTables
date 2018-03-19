@@ -7,4 +7,5 @@ urlpatterns = [
     url(r'^auth/$', views.getCommCareAuth, name='getCommCareAuth'),
     url(r'^$', views.getCommCareData, name='getCommCareData'),
     url(r'^logout/$',views.commcareLogout, name='commcareLogout'),
+    url(r'^report_names/$', views.get_commcare_report_names, name='getCommCareReportNames')
 ]

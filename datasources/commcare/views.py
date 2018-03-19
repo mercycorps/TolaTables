@@ -19,7 +19,7 @@ from django.contrib.auth.decorators import login_required
 from silo.models import Silo, Read, ReadType, ThirdPartyTokens
 from .forms import CommCareAuthForm, CommCareProjectForm
 from .tasks import fetchCommCareData, requestCommCareData
-from .util import getCommCareCaseData, getReportIDs
+from .util import getCommCareCaseData, getCommCareReportIDs
 
 @login_required
 def getCommCareAuth(request):
@@ -189,8 +189,17 @@ def getCommCareData(request):
 
         if form.is_valid():
             project = request.POST['project']
+            commcare_token = ThirdPartyTokens.objects.get(user=request.user, name=provider)
+            auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
+
             try:
                 report_name = request.POST['commcare_report_name']
+                report_id = None
+                report_map = getCommCareReportIDs(project, auth_header)
+                for id in report_map:
+                    if report_map[id] == report_name:
+                        report_id = id
+                        break
             except MultiValueDictKeyError:
                 report_name = None
 
@@ -207,8 +216,6 @@ def getCommCareData(request):
             base_url = 'https://www.commcarehq.org/a/%s/api/v0.5/%s/'
             url = base_url % (project, download_type)
 
-            commcare_token = ThirdPartyTokens.objects.get(user=request.user, name=provider)
-            auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
 
             #get size of dataset
 
@@ -217,9 +224,7 @@ def getCommCareData(request):
                 url = url + report_id + '?format=JSON&limit=1'
                 response = requests.get(url, headers=auth_header)
                 response_data = json.loads(response.content)
-                print 'my response data is this', response_data
                 data_count = response_data['total_records']
-                print 'report total cases', data_count
 
             else:
                 url = base_url % (project, 'case')
@@ -284,3 +289,13 @@ def commcareLogout(request):
 
     messages.error(request, "You have been logged out of your CommCare account.  Any Tables you have created with this account ARE still available, but you must log back in here to update them.")
     return HttpResponseRedirect(reverse_lazy('getCommCareAuth'))
+
+
+@login_required
+def get_commcare_report_names(request):
+
+    project = request.GET['project']
+    commcare_token = ThirdPartyTokens.objects.get(user=request.user, name='CommCare')
+    auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
+    reports = getCommCareReportIDs(project, auth_header)
+    return HttpResponse(json.dumps(reports))

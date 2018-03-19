@@ -23,8 +23,9 @@ def getProjects(user_id):
         projects.append(read.read_url.split('/')[4])
     return list(set(projects))
 
+
 #get a list of reports available to the user
-def getReportIDs(project_name, header):
+def getCommCareReportIDs(project_name, header):
     url = 'https://www.commcarehq.org/a/%s/api/v0.5/simplereportconfiguration/?format=JSON' % project_name
     response = requests.get(url, headers=header)
     response_data = json.loads(response.content)
