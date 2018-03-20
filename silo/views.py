@@ -48,6 +48,7 @@ from tola.util import importJSON, saveDataToSilo, getSiloColumnNames,\
 
 
 from commcare.tasks import fetchCommCareData
+from commcare.util import getCommCareReportCount, getCommCareDataHelper
 
 from .models import Silo, Read, ReadType, ThirdPartyTokens, LabelValueStore, Tag, UniqueFields, MergedSilosFieldMapping, TolaSites, PIIColumn, DeletedSilos, FormulaColumn
 from .forms import get_read_form, UploadForm, SiloForm, MongoEditForm, NewColumnForm, EditColumnForm, OnaLoginForm
@@ -1067,63 +1068,82 @@ def importDataFromRead(request, silo, read):
             commcare_token = ThirdPartyTokens.objects.get(user=silo.owner.pk, name="CommCare")
         except Exception as e:
             return (None,0,(messages.ERROR, "You need to login to commcare using an API Key to access this functionality"))
-        last_data_retrieved = str(getNewestDataDate(silo.id))[:10]
-        url = "/".join(read.read_url.split("/")[:8]) + "?date_modified_start=" + last_data_retrieved + "&" + "limit="
-        response = requests.get(url+ str(1), headers={'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}})
-        if response.status_code == 401:
-            commcare_token.delete()
-            return (None,0,(messages.ERROR, "Your Commcare usernmane or API Key is incorrect"))
-        elif response.status_code != 200:
-            return (None,0,(messages.ERROR, "An error importing from commcare has occured: %s %s " % (response.status_code, response.text)))
-        metadata = json.loads(response.content)
-        if metadata['meta']['total_count'] == 0:
-            return (None, 2, (messages.SUCCESS, "Your commcare data was already up to date"))
-        #Now call the update data function in commcare tasks
-        auth = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
-        url += "50"
-        data_raw = fetchCommCareData(url, auth, True, 0, metadata['meta']['total_count'], 50, silo.id, read.id, True)
-        data_collects = data_raw.apply_async()
-        data_retrieval = [v.get() for v in data_collects]
-        columns = set()
-        for data in data_retrieval:
-            columns = columns.union(data)
-        #correct the columns
-        try: columns.remove("")
-        except KeyError as e: pass
-        try: columns.remove("silo_id")
-        except KeyError as e: pass
-        try: columns.remove("read_id")
-        except KeyError as e: pass
-        for column in columns:
-            if "." in column:
-                columns.remove(column)
-                columns.add(column.replace(".", "_"))
-            if "$" in column:
-                columns.remove(column)
-                columns.add(column.replace("$", "USD"))
-        try:
-            columns.remove("id")
-            columns.add("user_assigned_id")
-        except KeyError as e: pass
-        try:
-            columns.remove("_id")
-            columns.add("user_assigned_id")
-        except KeyError as e: pass
-        try:
-            columns.remove("edit_date")
-            columns.add("editted_date")
-        except KeyError as e: pass
-        try:
-            columns.remove("create_date")
-            columns.add("created_date")
-        except KeyError as e: pass
-        #now mass update all the data in the database
+        auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
 
-        columns = list(columns)
-        addColsToSilo(silo, columns)
-        hideSiloColumns(silo, columns)
+        # how to fetch depends on whether reports or cases are being downloaded
+        # url, auth_header, True, data_count, silo, read, request.POST['commcare_report_name']
+        if 'configurablereportdata' in read.read_url:
+            url = read.read_url
+            url_parts = url.split('/')
+            project = url_parts[4]
+            report_id = url_parts[8]
+            print 'project and repot id', project, report_id
+            # https://www.commcarehq.org/a/mercycorpsnigeria/api/v0.5/configurablereportdata/bb8473fc3ef63eda59105315e91cb672?format=JSON
+            data_count = getCommCareReportCount(project, auth_header, report_id)
+            helper_msgs = getCommCareDataHelper(url, auth_header, True, data_count, silo, read, report_id)
+            print 'report ret1 and 2', helper_msgs[0], helper_msgs[1]
+            #messages.add_message(request,ret[0],ret[1])
+            #need to impliment if import failure
+            return (None,2,(helper_msgs[0], helper_msgs[1]))
 
-        return (None,2,(messages.SUCCESS, "%i commcare records were successfully updated" % metadata['meta']['total_count']))
+        else:
+            last_data_retrieved = str(getNewestDataDate(silo.id))[:10]
+            url = "/".join(read.read_url.split("/")[:8]) + "?date_modified_start=" + last_data_retrieved + "&" + "limit="
+            response = requests.get(url+ str(1), headers=auth_header)
+            if response.status_code == 401:
+                commcare_token.delete()
+                return (None,0,(messages.ERROR, "Your Commcare usernmane or API Key is incorrect"))
+            elif response.status_code != 200:
+                return (None,0,(messages.ERROR, "An error importing from commcare has occured: %s %s " % (response.status_code, response.text)))
+            metadata = json.loads(response.content)
+            if metadata['meta']['total_count'] == 0:
+                return (None, 2, (messages.SUCCESS, "Your commcare data was already up to date"))
+            #Now call the update data function in commcare tasks
+            auth = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
+            url += "50"
+            data_raw = fetchCommCareData(url, auth, True, 0, metadata['meta']['total_count'], 50, silo.id, read.id, True)
+            data_collects = data_raw.apply_async()
+            data_retrieval = [v.get() for v in data_collects]
+            columns = set()
+            for data in data_retrieval:
+                columns = columns.union(data)
+            #correct the columns
+            try: columns.remove("")
+            except KeyError as e: pass
+            try: columns.remove("silo_id")
+            except KeyError as e: pass
+            try: columns.remove("read_id")
+            except KeyError as e: pass
+            for column in columns:
+                if "." in column:
+                    columns.remove(column)
+                    columns.add(column.replace(".", "_"))
+                if "$" in column:
+                    columns.remove(column)
+                    columns.add(column.replace("$", "USD"))
+            try:
+                columns.remove("id")
+                columns.add("user_assigned_id")
+            except KeyError as e: pass
+            try:
+                columns.remove("_id")
+                columns.add("user_assigned_id")
+            except KeyError as e: pass
+            try:
+                columns.remove("edit_date")
+                columns.add("editted_date")
+            except KeyError as e: pass
+            try:
+                columns.remove("create_date")
+                columns.add("created_date")
+            except KeyError as e: pass
+            #now mass update all the data in the database
+
+            columns = list(columns)
+            addColsToSilo(silo, columns)
+            hideSiloColumns(silo, columns)
+
+            return (None,2,(messages.SUCCESS, "%i commcare records were successfully updated" % metadata['meta']['total_count']))
     else:
         return (None,0,(messages.ERROR,"%s does not support update data functionality. You will have to reinport the data manually" % read.type.read_type))
 

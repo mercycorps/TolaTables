@@ -19,7 +19,7 @@ from django.contrib.auth.decorators import login_required
 from silo.models import Silo, Read, ReadType, ThirdPartyTokens
 from .forms import CommCareAuthForm, CommCareProjectForm
 from .tasks import fetchCommCareData, requestCommCareData
-from .util import getCommCareCaseData, getCommCareReportIDs
+from .util import getCommCareDataHelper, getCommCareReportIDs, getCommCareReportCount
 
 @login_required
 def getCommCareAuth(request):
@@ -224,9 +224,7 @@ def getCommCareData(request):
             if download_type == 'report':
                 url = base_url % (project, 'configurablereportdata')
                 url = url + report_id + '?format=JSON&limit=1'
-                response = requests.get(url, headers=auth_header)
-                response_data = json.loads(response.content)
-                data_count = response_data['total_records']
+                data_count = getCommCareReportCount(project, auth_header, report_id)
 
             else:
                 url = base_url % (project, 'case')
@@ -257,7 +255,7 @@ def getCommCareData(request):
                 silo.reads.add(read)
             print 'hey look commcare form', request.POST['commcare_report_name']
             #get the actual data
-            ret = getCommCareCaseData(url, auth_header, True, data_count, silo, read, request.POST['commcare_report_name'])
+            ret = getCommCareDataHelper(url, auth_header, True, data_count, silo, read, request.POST['commcare_report_name'])
             messages.add_message(request,ret[0],ret[1])
             #need to impliment if import faluire
             cols = ret[2]

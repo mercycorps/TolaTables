@@ -34,8 +34,15 @@ def getCommCareReportIDs(project_name, header):
         report_ids[rpt_info['id']] = rpt_info['title']
     return report_ids
 
+def getCommCareReportCount(project, auth_header, report_id):
+    url = 'https://www.commcarehq.org/a/%s/api/v0.5/configurablereportdata/%s/?format=JSON&limit=1' % (project, report_id)
+    print 'reptcout url ', url
+    response = requests.get(url, headers=auth_header)
+    response_data = json.loads(response.content)
+    return response_data['total_records']
 
-def getCommCareCaseData(url, auth, auth_header, total_cases, silo, read, commcare_report_name):
+
+def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, commcare_report_name):
     """
     Use fetch and request CommCareData to store all of the case data
 
