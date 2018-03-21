@@ -1053,7 +1053,7 @@ def importDataFromRead(request, silo, read):
             #messages.add_message(request, result[0], result[1])
             if data:
                 return ([data],1,(messages.SUCCESS, "Your JSON feed has been successfully updated"))
-            return (None,0,(messages.ERROR, "Their was an error with updating yoru JSON feed data"))
+            return (None,0,(messages.ERROR, "There was an error with updating yoru JSON feed data"))
         else:
             return (None,2,(messages.INFO, "When updating data in a table, its JSON file data is ignored."))
     elif read.type.read_type == "GSheet Import":

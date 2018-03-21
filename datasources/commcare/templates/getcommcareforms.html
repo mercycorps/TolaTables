@@ -116,9 +116,11 @@
         });
 
         $("input[type=radio][name=download_type]").on("change", function(){
-            console.log('yup', this.value)
             if (this.value == 'commcare_report'){
                 $("#div_id_commcare_report_name").css("display", "inherit");
+            }
+            else if (this.value == 'commcare_form') {
+              $("#div_id_commcare_form_name").css("display", "inherit");
             }
             else {
               $("#div_id_commcare_report_name").css("display", "none");

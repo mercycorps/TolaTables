@@ -59,9 +59,10 @@ class CommCareProjectForm(forms.Form):
     project = forms.CharField(required=True, help_text=mark_safe("This is the name of the project you are importing from. Press the down arrow to see the name of past projects you have imported from. The projects your account has access to are listed in your CommCare <a href='https://www.commcarehq.org/account/projects/' target='_blank'>settings</a> under my projects.<br/>If you are not getting access it could be because your project has a different name then what you as a user can see. To see your projects true name go to CommCare <a href='https://www.commcarehq.org/account/projects/' target='_blank'>settings</a>"))
     silo = forms.ChoiceField(required=True)
 
-    TYPE_CHOICES = [('commcare_report', 'Report'), ('cases', 'Cases')]
+    TYPE_CHOICES = [('commcare_report', 'Report'), ('commcare_form', 'Form'), ('cases', 'Cases')]
     download_type = forms.ChoiceField(choices=TYPE_CHOICES, widget=forms.RadioSelect())
     commcare_report_name = forms.ChoiceField(required=False)
+    commcare_form_name = forms.CharField(required=False)
 
     def __init__(self, *args, **kwargs):
         import json

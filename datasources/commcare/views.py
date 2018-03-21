@@ -190,56 +190,60 @@ def getCommCareData(request):
         commcare_token = ThirdPartyTokens.objects.get(user=request.user, name=provider)
         auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
         project = request.POST['project']
-        report_id = request.POST['commcare_report_name']
-        report_map = getCommCareReportIDs(project, auth_header)
-        report_choices = [(k, v) for k,v in report_map.iteritems()]
+        try:
+            report_id = request.POST['commcare_report_name']
+            report_map = getCommCareReportIDs(project, auth_header)
+            report_choices = [(k, v) for k,v in report_map.iteritems()]
+        except KeyError:
+            report_id = False
+        try:
+            commcare_form_id = request.POST['commcare_form_name']
+            # form_map = getCommCareReportIDs(project, auth_header)
+            # report_choices = [(k, v) for k,v in report_map.iteritems()]
+        except KeyError:
+            commcare_form_id = False
         form = CommCareProjectForm(request.POST, silo_choices=silo_choices, report_choices=report_choices, user_id=user_id)
 
         if form.is_valid():
 
 
-            try:
-                report_id = request.POST['commcare_report_name']
-                report_map = getCommCareReportIDs(project, auth_header)
+            if report_id:
                 report_name = report_map[report_id]
-            except MultiValueDictKeyError:
+            else:
                 report_name = None
 
             user = request.user
-
-            if request.POST['download_type'] == 'commcare_form':
-                download_type = 'form'
-            elif request.POST['download_type'] == 'commcare_report':
-                download_type = 'report'
-            else:
-                download_type = 'case'
-
-            #prep url for finding size of dataset
+            download_type = request.POST['download_type']
             base_url = 'https://www.commcarehq.org/a/%s/api/v0.5/%s/'
-            url = base_url % (project, download_type)
 
+            #set url and get size of dataset
 
-            #get size of dataset
-
-            if download_type == 'report':
+            if download_type == 'commcare_report':
                 url = base_url % (project, 'configurablereportdata')
                 url = url + report_id + '?format=JSON&limit=1'
                 data_count = getCommCareReportCount(project, auth_header, report_id)
-
+            elif download_type == 'commcare_form':
+                url = base_url % (project, 'form')
+                url = url + '?limit=1'
+                print 'theurl=', url
+                response = requests.get(url, headers=auth_header)
+                print "the response", response
+                response_data = json.loads(response.content)
+                data_count = response_data['meta']['total_count']
+                print "datacount for the form", data_count
             else:
                 url = base_url % (project, 'case')
-                url = url + report_id + '?format=JSON&limit=1'
+                url = url + '?format=JSON&limit=1'
+                response = requests.get(url, headers=auth_header)
+                response_data = json.loads(response.content)
                 data_count = response_data.get('meta').get('total_count')
-                print 'got a total count', data_count
-
 
             # need to redo the url if downloading a reports
 
-            url = url.replace('&limit=1', '')
-            print 'penultimate url', url
-
-            if report_name:
+            if download_type == 'report':
                 read_name = '%s report - %s' % (project, report_name)
+            elif download_type == 'form':
+                read_name = '%s form - %s' % (project, report_name)
             else:
                 read_name = project + ' cases'
             read, read_created = Read.objects.get_or_create(read_name=read_name, owner=user,
@@ -253,9 +257,10 @@ def getCommCareData(request):
                 silo.reads.add(read)
             elif read not in silo.reads.all():
                 silo.reads.add(read)
-            print 'hey look commcare form', request.POST['commcare_report_name']
+
             #get the actual data
-            ret = getCommCareDataHelper(url, auth_header, True, data_count, silo, read, request.POST['commcare_report_name'])
+            extra_data = report_name or commcare_form_id
+            ret = getCommCareDataHelper(url, auth_header, True, data_count, silo, read, download_type, extra_data=extra_data)
             messages.add_message(request,ret[0],ret[1])
             #need to impliment if import faluire
             cols = ret[2]

@@ -42,7 +42,7 @@ def getCommCareReportCount(project, auth_header, report_id):
     return response_data['total_records']
 
 
-def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, commcare_report_name):
+def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, download_type, extra_data):
     """
     Use fetch and request CommCareData to store all of the case data
 
@@ -54,18 +54,17 @@ def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, commc
     read -- read that the data is apart of
     """
 
-    if commcare_report_name:
+    if download_type == 'report':
         record_limit = 50
     else:
-        record_limit = 100
+        record_limit = 3
+
     # check if there are already parameters on the url
-    if '?' in url:
-        base_url = url + "&limit=" + str(record_limit)
-    else:
-        base_url = url + "?limit=" + str(record_limit)
+    base_url = url.replace('limit=1', 'limit=' + str(record_limit))
 
     data_raw = fetchCommCareData(base_url, auth, auth_header,\
-                    0, total_cases, record_limit, silo.id, read.id, commcare_report_name)
+                    0, 5, record_limit, silo.id, read.id, \
+                    download_type, extra_data)
     data_collects = data_raw.apply_async()
     data_retrieval = [v.get() for v in data_collects]
     columns = set()
