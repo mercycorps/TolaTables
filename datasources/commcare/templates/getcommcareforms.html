@@ -42,6 +42,21 @@
 {% block extra_js_in_body %}
     <script type="text/javascript">
         $(document).ready(function() {
+            var downloadType = $("input[type=radio][name=download_type]");
+            console.log ('checked, val', downloadType.checked, downloadType.val());
+            // if (downloadType.val() == 'report' && downloadType.checked == true) {
+            //     $("#div_id_commcare_report_name").css("display", "inherit");
+            //     $("#div_id_commcare_form_name").css("display", "none");
+            // }
+            // else if (downloadType.val() == 'form' && downloadType.checked == true) {
+            //     $("#div_id_commcare_report_name").css("display", "none");
+            //     $("#div_id_commcare_form_name").css("display", "inherit");
+            // }
+            // else {
+            //     $("#div_id_commcare_report_name").css("display", "none");
+            //     $("#div_id_commcare_form_name").css("display", "none");
+            // }
+
             //This jquery function controls the dropdown menu in crispy_forms
             $('select[id="id_silo"]').on("change", function() {
                 var select_obj = $("#" + this.id);
@@ -73,7 +88,7 @@
                     complete: function(data, status) {
                         if (status == "success") {
                             console.log('thisis data', data.responseJSON)
-                            var options = [];
+                            var options = ['<option value=default>Select a Report</option>'];
                             $.each(data.responseJSON, function (id, name) {
                                 options.push('<option value=' + id + '>' + name + '</option>');
                             });
@@ -86,79 +101,24 @@
                 });
             });
 
-
-            // //This jquery function controls the progress bar on the import screen
-            // $('form[action="/commcare/"]').submit(function(e){
-            //     // $("#progress_modal").modal();
-            //     $("#progress_number").text(0+"/{{entries}} downloaded");
-            //     $("#progress_modal").modal();
-            //     // getSiloIdFromRead();
-            //     // getNumEntry();
-            //     // controls the progress bar
-            //     $(".progress-bar").animate({
-            //         width: "100%"
-            //     }, {{entries}}*500);
-            // });
-            //
-            // //This jquery function controls the progress bar on the import from password screen
-            // $('form[action="/commcare/passform/"]').submit(function(e){
-            //     // $("#progress_modal").modal();
-            //     $("#progress_number").text(0+"/{{entries}} downloaded");
-            //     $("#progress_modal").modal();
-            //     // getSiloIdFromRead();
-            //     // getNumEntry();
-            //     // controls the progress bar
-            //     $(".progress-bar").animate({
-            //         width: "100%"
-            //     }, {{entries}}*500);
-            // });
-
         });
 
         $("input[type=radio][name=download_type]").on("change", function(){
+            console.log('value, checked', this.value, this.checked)
             if (this.value == 'commcare_report'){
                 $("#div_id_commcare_report_name").css("display", "inherit");
+                $("#div_id_commcare_form_name").css("display", "none");
             }
             else if (this.value == 'commcare_form') {
               $("#div_id_commcare_form_name").css("display", "inherit");
+              $("#div_id_commcare_report_name").css("display", "none");
             }
             else {
               $("#div_id_commcare_report_name").css("display", "none");
+              $("#div_id_commcare_form_name").css("display", "none");
             }
         });
 
 
-        // this does it
-        // to impliment # of imports left
-        // function getSiloIdFromRead(){
-        //     var ajaxOpts = {
-        //         type: "GET",
-        //         url: "/api/silo",
-        //         success: function(data) {
-        //           //cycle through the different silos
-        //           for (var i = 0; i < data.data.length; i++) {
-        //             // cycle through the different reads in silos
-        //             for (var j = 0; j < data.data[i].reads.length; j++) {
-        //               // if (data.data[i].reads[j].edit_date-time<3600) {
-        //                 alert(data.data[i].reads[j].edit_date-10);
-        //               // }
-        //             }
-        //           }
-        //         }
-        //     };
-        //     $.ajax(ajaxOpts);
-        // }
-        //
-        // function getNumEntry() {
-        //     var ajaxOpts = {
-        //         type: "GET",
-        //         url: "/api/silo/{{silo_id}}",
-        //         success: function(data) {
-        //             $("#progress_number").text(data.data_count+"/{{entries}} downloaded");
-        //         }
-        //     };
-        //     $.ajax(ajaxOpts);
-        //     // setTimeout('getNumEntry()',10000);
-        // }
     </script>
 {% endblock %}

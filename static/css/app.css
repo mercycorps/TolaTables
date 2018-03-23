@@ -73,6 +73,10 @@ body > .container {
     margin-bottom: -20px;
 }
 
+#commcare-import-form .alert {
+    margin-bottom: 40px;
+}
+
 #footer > .container {
     padding: 10px;
 }
@@ -258,7 +262,6 @@ body > .container {
 /* Commcare Import Form */
 
 /* Start hidden, unhide of they indicate they are importing forms */
-#div_id_commcare_report_name, #div_id_commcare_form_name {
+#div_id_commcare_form_name, #div_id_commcare_report_name {
   display: none;
 }
-

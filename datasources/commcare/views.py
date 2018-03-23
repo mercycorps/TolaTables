@@ -74,84 +74,6 @@ def getCommCareAuth(request):
 
         return render(request, 'getcommcareforms.html', {'form': form})
 
-            # try:
-            #     created = False
-            #     #either add a new commcare_auth token or retrieve an old one
-    #             try:
-    #                 if request.POST['auth_token'] != '':
-    #                     commcare_token, created = ThirdPartyTokens.objects.get_or_create(user=request.user,name=provider,token=request.POST['auth_token'],username=request.POST['username'])
-    #                     form = CommCareAuthForm(request.POST, choices=silo_choices, user_id=user_id)
-    #                     if form.is_valid():
-    #                         pass
-    #             except Exception as e:
-    #                 commcare_token = ThirdPartyTokens.objects.get(user=request.user,name=provider)
-    #
-    #             project = request.POST['project']
-    #             if request.POST['download_type'] == 'commcare_form':
-    #                 download_type = 'form'
-    #                 url_params = {}
-    #             else:
-    #                 download_type = 'case'
-    #                 url_params = {'format': 'JSON'}
-    #             url_params['limit'] = 1
-    #             #https://www.commcarehq.org/a/[PROJECT]/api/v0.5/simplereportconfiguration/?format=json
-    #
-    #             url = 'https://www.commcarehq.org/a/{project}/api/v0.5/{type}/?{params}'
-    #             url = url.format(
-    #                 project=project,
-    #                 type=download_type,
-    #                 params=urllib.urlencode(url_params)
-    #             )
-    #             headers = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
-    #             response = requests.get(url, headers=headers)
-    #             if response.status_code == 401:
-    #                 messages.error(request, "Invalid username, authorization token or project.")
-    #                 try:
-    #                     token = ThirdPartyTokens.objects.get(user=request.user, name="CommCare")
-    #                     token.delete()
-    #                 except Exception as e:
-    #                     pass
-    #                 form = CommCareAuthForm(choices=silo_choices, user_id=user_id)
-    #             elif response.status_code == 200:
-    #                 response_data = json.loads(response.content)
-    #                 total_cases = response_data.get('meta').get('total_count')
-    #                 if created: commcare_token.save()
-    #                 #add the silo and reads if necessary
-    #                 try:
-    #                     silo_id = int(request.POST.get("silo", None))
-    #                     if silo_id == 0:
-    #                         silo_id = None
-    #                 except Exception as e:
-    #                     return HttpResponse("Silo ID can only be an integer")
-    #
-    #                 #get the actual data
-    #                 authorization = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
-    #
-    #                 return HttpResponseRedirect(reverse_lazy("siloDetail", kwargs={'silo_id' : silo.id}))
-    #
-    #             else:
-    #                 messages.error(request, "A %s error has occured: " % (response.status_code))
-    #                 form = CommCareAuthForm(choices=silo_choices, user_id=user_id)
-    #         except KeyboardInterrupt as e:
-    #             form = CommCareAuthForm(request.POST, choices=silo_choices, user_id=user_id)
-    #             form.is_valid()
-    #     else:
-    #         try:
-    #             #look for authorization token
-    #             commcare_token = ThirdPartyTokens.objects.get(user=request.user,name=provider)
-    #         except Exception as e:
-    #             form = CommCareAuthForm(request.POST, choices=silo_choices, user_id=user_id)
-    #
-    # else:
-    #     try:
-    #         #look for authorization token
-    #         commcare_token = ThirdPartyTokens.objects.get(user=request.user,name=provider)
-    #         form = CommCareProjectForm(choices=silo_choices, user_id=user_id)
-    #         auth = 0
-    #     except Exception as e:
-    #         form = CommCareAuthForm(choices=silo_choices, user_id=user_id)
-
-    # return render(request, 'getcommcareforms.html', {'form': form, 'auth': auth, 'entries': total_cases, 'time' : timezone.now()})
 
     return render(request, 'getcommcareforms.html', {'form': form})
 
@@ -193,7 +115,8 @@ def getCommCareData(request):
         try:
             report_id = request.POST['commcare_report_name']
             report_map = getCommCareReportIDs(project, auth_header)
-            report_choices = [(k, v) for k,v in report_map.iteritems()]
+            report_choices = [('default', 'Select a Report')]
+            report_choices.extend([(k, v) for k,v in report_map.iteritems()])
         except KeyError:
             report_id = False
         try:
@@ -207,7 +130,7 @@ def getCommCareData(request):
         if form.is_valid():
 
 
-            if report_id:
+            if report_id != 'default':
                 report_name = report_map[report_id]
             else:
                 report_name = None
@@ -260,14 +183,16 @@ def getCommCareData(request):
 
             #get the actual data
             extra_data = report_name or commcare_form_id
-            ret = getCommCareDataHelper(url, auth_header, True, data_count, silo, read, download_type, extra_data=extra_data)
+            ret = getCommCareDataHelper(url, auth_header, True, data_count, silo, read, download_type, extra_data)
             messages.add_message(request,ret[0],ret[1])
             #need to impliment if import faluire
             cols = ret[2]
             return HttpResponseRedirect(reverse_lazy("siloDetail", kwargs={'silo_id' : silo.id}))
 
-        else:
-            messages.error(request, "Could not get data")
+        # else:
+        #     for m in messages.get_messages(request):
+        #         print 'm e ss', m
+        #     messages.error(request, "Could not get data")
         return render(request, 'getcommcareforms.html', {'form': form})
 
     else:

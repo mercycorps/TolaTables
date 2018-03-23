@@ -75,4 +75,4 @@ def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, downl
     #order has to be maintained (2n instead of n)
     addColsToSilo(silo, columns)
     hideSiloColumns(silo, ["case_id"])
-    return (messages.SUCCESS, "CommCare cases imported successfully", columns)
+    return (messages.SUCCESS, "CommCare data imported successfully", columns)

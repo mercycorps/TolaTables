@@ -1,3 +1,4 @@
+import json
 from django.core.urlresolvers import reverse_lazy
 
 from django.forms import ModelForm
@@ -30,42 +31,17 @@ class ListTextWidget(forms.TextInput):
         return (text_html + data_list)
 
 
-
-# class CommCarePassForm(forms.Form):
-#     username = forms.CharField(max_length=60, required=True)
-#     password = forms.CharField(required=True, widget=forms.PasswordInput())
-#     project = forms.CharField(required=True, help_text=mark_safe("This is the name of the project you are importing from. Press the down arrow to see the name of past projects you have imported from. To see the name of your CommCare projects go to CommCare <a href='https://www.commcarehq.org/account/projects/#'>settings then click my projects</a>"))
-#     download_type = forms.CharField(required=True, widget=ListTextWidget(data_list=['Forms', 'Cases'], name='download_type'))
-#     silo = forms.ChoiceField(required=True)
-#
-#
-#     def __init__(self, *args, **kwargs):
-#         choices = kwargs.pop('choices')
-#         user_id = kwargs.pop('user_id')
-#         self.helper = FormHelper()
-#         self.helper.form_class = 'form-horizontal'
-#         self.helper.label_class = 'col-sm-2'
-#         self.helper.field_class = 'col-sm-10'
-#         self.helper.form_method = 'post'
-#         self.helper.form_action = reverse_lazy('getCommCarePass')
-#         self.helper.add_input(Submit('submit', 'Submit'))
-#         self.helper.add_input(Reset('rest', 'Reset', css_class='btn-warning'))
-#         super(CommCarePassForm, self).__init__(*args, **kwargs)
-#         self.fields['project'].widget = ListTextWidget(data_list=getProjects(user_id), name='projects')
-#         self.fields['silo'].choices = choices
-
-
 class CommCareProjectForm(forms.Form):
     project = forms.CharField(required=True, help_text=mark_safe("This is the name of the project you are importing from. Press the down arrow to see the name of past projects you have imported from. The projects your account has access to are listed in your CommCare <a href='https://www.commcarehq.org/account/projects/' target='_blank'>settings</a> under my projects.<br/>If you are not getting access it could be because your project has a different name then what you as a user can see. To see your projects true name go to CommCare <a href='https://www.commcarehq.org/account/projects/' target='_blank'>settings</a>"))
     silo = forms.ChoiceField(required=True)
 
-    TYPE_CHOICES = [('commcare_report', 'Report'), ('commcare_form', 'Form'), ('cases', 'Cases')]
+    # TYPE_CHOICES = [('commcare_report', 'Report'), ('commcare_form', 'Form'), ('cases', 'Cases')]
+    TYPE_CHOICES = [('commcare_report', 'Report'), ('cases', 'Cases')]
     download_type = forms.ChoiceField(choices=TYPE_CHOICES, widget=forms.RadioSelect())
     commcare_report_name = forms.ChoiceField(required=False)
     commcare_form_name = forms.CharField(required=False)
 
     def __init__(self, *args, **kwargs):
-        import json
         from django.core.serializers.json import DjangoJSONEncoder
         silo_choices = kwargs.pop('silo_choices')
         user_id = kwargs.pop('user_id')
@@ -75,6 +51,7 @@ class CommCareProjectForm(forms.Form):
         self.helper.label_class = 'col-sm-2'
         self.helper.field_class = 'col-sm-10'
         self.helper.form_method = 'post'
+        self.helper.form_id = 'commcare-import-form'
         self.helper.form_action = reverse_lazy('getCommCareData')
         self.helper.add_input(Submit('submit', 'Submit'))
         self.helper.add_input(Reset('rest', 'Reset', css_class='btn-warning'))
@@ -83,6 +60,24 @@ class CommCareProjectForm(forms.Form):
         self.fields['silo'].choices = silo_choices
         self.fields['silo'].label = 'Table'
         self.fields['commcare_report_name'].choices = report_choices
+
+    def clean(self):
+        cleaned_data = super(CommCareProjectForm, self).clean()
+        download_type = cleaned_data.get('download_type')
+        commcare_report_name = cleaned_data.get('commcare_report_name')
+        commcare_form_name = cleaned_data.get('commcare_form_name')
+        silo = cleaned_data.get('silo')
+        print 'silothing', silo
+        print 'commrptnam, type', commcare_report_name, download_type
+        if download_type == 'commcare_report' and commcare_report_name == 'default':
+            self.add_error('commcare_report_name', "You must choose a report from the dropdown")
+            raise forms.ValidationError("Your submission has errors")
+        if str(silo) == str(-1):
+            self.add_error('silo', "You must choose a Table or create a new one")
+            raise forms.ValidationError("Your submission has errors")
+
+        return cleaned_data
+
 
 
 class CommCareAuthForm(forms.Form):
