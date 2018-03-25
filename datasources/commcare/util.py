@@ -13,6 +13,9 @@ from tola.util import saveDataToSilo, addColsToSilo, hideSiloColumns
 from pymongo import MongoClient
 from django.conf import settings
 
+client  = MongoClient(settings.MONGODB_URI)
+db = client.get_database(settings.TOLATABLES_MONGODB_NAME)
+
 
 #this gets a list of projects that users have used in the past to import data from commcare
 #used in commcare/forms.py
@@ -42,7 +45,7 @@ def getCommCareReportCount(project, auth_header, report_id):
     return response_data['total_records']
 
 
-def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, download_type, extra_data):
+def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, download_type, extra_data, update=False):
     """
     Use fetch and request CommCareData to store all of the case data
 
@@ -54,22 +57,47 @@ def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, downl
     read -- read that the data is apart of
     """
 
-    if download_type == 'report':
+    # CommCare has a max limit of 50 for report downloads
+    if download_type == 'commcare_report':
         record_limit = 50
     else:
         record_limit = 3
 
-    # check if there are already parameters on the url
+    # replace the record limit
     base_url = url.replace('limit=1', 'limit=' + str(record_limit))
 
+    # For reports, we need to save the current data so we can delete it after a
+    # successful import
+    if download_type == 'commcare_report' and update:
+        # current_data = LabelValueStore.objects(silo_id=silo.id)
+        # current_data = db.label_value_store.find({'silo_id':silo.id}, {'_id': 1}).to_array()
+        # print 'currentdata', current_data.count(), current_data
+        db.label_value_store.update({'silo_id':silo.id}, {'$set': {'silo_id':'old-'+str(silo.id)}}, multi=True)
+
     data_raw = fetchCommCareData(base_url, auth, auth_header,\
-                    0, 5, record_limit, silo.id, read.id, \
+                    0, 10, record_limit, silo.id, read.id, \
                     download_type, extra_data)
     data_collects = data_raw.apply_async()
     data_retrieval = [v.get() for v in data_collects]
     columns = set()
     for data in data_retrieval:
         columns = columns.union(data)
+
+    if download_type == 'commcare_report' and update:
+        #delete the old data only if new data has been entered into MongoDB
+        if columns:
+            db.label_value_store.remove({'silo_id': 'old-'+str(silo.id)})
+        else:
+            db.label_value_store.update({'silo_id':'old-'+str(silo.id)}, {'$set': {'silo_id':silo.id}}, multi=True)
+        # new_data = db.label_value_store.find({'silo_id':silo.id})
+        # print 'new data', new_data.count, new_data
+        # delete_result = db.label_value_store.delete_many(current_data)
+        # print 'deleted?', delete_result.deleted_count
+        # # for dat in current_data:
+        #     print "deleting"
+        #     del_count = dat.delete()
+        #     print 'deleted this many', del_count
+        # current_data.delete()
 
     #add new columns to the list of current columns this is slower because
     #order has to be maintained (2n instead of n)

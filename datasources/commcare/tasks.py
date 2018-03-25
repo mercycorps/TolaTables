@@ -30,6 +30,7 @@ def fetchCommCareData(url, auth, auth_header, start, end, step, silo_id, read_id
     update -- if true use the update functioality instead of the regular store furnctionality
     form -- if None download case data, otherwise download form data and save only specified form
     """
+    print 'fetch params', [(k, locals()[k]) for k in locals().keys()]
     return group(requestCommCareData.s(url, offset, auth, auth_header, silo_id, read_id, download_type, extra_data, update, 0) \
             for offset in xrange(start,end,step))
 
@@ -68,7 +69,7 @@ def requestCommCareData(base_url, offset, auth, auth_header, silo_id, read_id, d
             #add something to this future error code stopping everything with throw exception
             time.sleep(1)
             req_count += 1
-            return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, download_type, extra_data, update)
+            return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, download_type, extra_data, update, req_count)
     print 'dtype', download_type
     # Now get the properties of each data. Process form data and case data differently.
     if download_type == 'commcare_report':
@@ -158,13 +159,7 @@ def storeCommCareData(data, silo_id, read_id, update):
         data_refined.append(row)
     print 'updateer', update
     db = getattr(MongoClient(settings.MONGODB_URI), settings.TOLATABLES_MONGODB_NAME)
-    if not update:
-        for row in data_refined:
-            row["create_date"] = timezone.now()
-            row["silo_id"] = silo_id
-            row["read_id"] = read_id
-        db.label_value_store.insert(data_refined)
-    else:
+    if update:
         for row in data_refined:
             row['edit_date'] = timezone.now()
             db.label_value_store.update(
@@ -173,6 +168,13 @@ def storeCommCareData(data, silo_id, read_id, update):
                 {"$set" : row},
                 upsert=True
             )
+    else:
+
+        for row in data_refined:
+            row["create_date"] = timezone.now()
+            row["silo_id"] = silo_id
+            row["read_id"] = read_id
+        db.label_value_store.insert(data_refined)
 
 # @shared_task()
 # def addExtraFields(columns, silo_id):

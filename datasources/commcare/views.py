@@ -143,7 +143,7 @@ def getCommCareData(request):
 
             if download_type == 'commcare_report':
                 url = base_url % (project, 'configurablereportdata')
-                url = url + report_id + '?format=JSON&limit=1'
+                url = url + report_id + '/?format=JSON&limit=1'
                 data_count = getCommCareReportCount(project, auth_header, report_id)
             elif download_type == 'commcare_form':
                 url = base_url % (project, 'form')
@@ -161,11 +161,9 @@ def getCommCareData(request):
                 response_data = json.loads(response.content)
                 data_count = response_data.get('meta').get('total_count')
 
-            # need to redo the url if downloading a reports
-
-            if download_type == 'report':
+            if download_type == 'commcare_report':
                 read_name = '%s report - %s' % (project, report_name)
-            elif download_type == 'form':
+            elif download_type == 'commcare_form':
                 read_name = '%s form - %s' % (project, report_name)
             else:
                 read_name = project + ' cases'
@@ -183,7 +181,7 @@ def getCommCareData(request):
 
             #get the actual data
             extra_data = report_name or commcare_form_id
-            ret = getCommCareDataHelper(url, auth_header, True, data_count, silo, read, download_type, extra_data)
+            ret = getCommCareDataHelper(url, auth_header, True, data_count, silo, read, download_type, extra_data, update=False)
             messages.add_message(request,ret[0],ret[1])
             #need to impliment if import faluire
             cols = ret[2]

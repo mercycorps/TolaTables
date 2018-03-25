@@ -1080,7 +1080,7 @@ def importDataFromRead(request, silo, read):
             print 'project and repot id', project, report_id
             # https://www.commcarehq.org/a/mercycorpsnigeria/api/v0.5/configurablereportdata/bb8473fc3ef63eda59105315e91cb672?format=JSON
             data_count = getCommCareReportCount(project, auth_header, report_id)
-            helper_msgs = getCommCareDataHelper(url, auth_header, True, data_count, silo, read, 'report', report_id)
+            helper_msgs = getCommCareDataHelper(url, auth_header, True, data_count, silo, read, 'commcare_report', report_id, update=True)
             print 'report ret1 and 2', helper_msgs[0], helper_msgs[1]
             #messages.add_message(request,ret[0],ret[1])
             #need to impliment if import failure
@@ -1101,7 +1101,7 @@ def importDataFromRead(request, silo, read):
             #Now call the update data function in commcare tasks
             auth = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
             url += "50"
-            data_raw = fetchCommCareData(url, auth, True, 0, metadata['meta']['total_count'], 50, silo.id, read.id, True)
+            data_raw = fetchCommCareData(url, auth, True, 0, metadata['meta']['total_count'], 50, silo.id, read.id, 'cases', None, True)
             data_collects = data_raw.apply_async()
             data_retrieval = [v.get() for v in data_collects]
             columns = set()
