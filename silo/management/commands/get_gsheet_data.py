@@ -30,7 +30,10 @@ class Command(BaseCommand):
         for silo in silos:
             reads = silo.reads.filter(type=read_type.pk)
             for read in reads:
-                msgs = import_from_gsheet_helper(silo.owner, silo.pk, None, read.resource_id, read.gsheet_id)
+                try:
+                    msgs = import_from_gsheet_helper(silo.owner, silo.pk, None, read.resource_id, read.gsheet_id)
+                except UnicodeEncodeError as e:
+                    logger.error("Silo_id %s encountered the following error: %s" % (silo.pk, e))
                 for msg in msgs:
                     # if it is not a success message then I want to know
                     if msg.get("level") != 25:
