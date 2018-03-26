@@ -27,7 +27,7 @@ def getProjects(user_id):
     return list(set(projects))
 
 
-#get a list of reports available to the user
+# get a list of reports available to the user
 def getCommCareReportIDs(project_name, header):
     url = 'https://www.commcarehq.org/a/%s/api/v0.5/simplereportconfiguration/?format=JSON' % project_name
     response = requests.get(url, headers=header)
@@ -37,12 +37,20 @@ def getCommCareReportIDs(project_name, header):
         report_ids[rpt_info['id']] = rpt_info['title']
     return report_ids
 
-def getCommCareReportCount(project, auth_header, report_id):
-    url = 'https://www.commcarehq.org/a/%s/api/v0.5/configurablereportdata/%s/?format=JSON&limit=1' % (project, report_id)
-    print 'reptcout url ', url
-    response = requests.get(url, headers=auth_header)
-    response_data = json.loads(response.content)
-    return response_data['total_records']
+# Rectrieve record counts for commcare download.
+def getCommCareRecordCount(base_url, auth_header, project=None, extra_data=None):
+    # If 'configurablereportdata' is in the url, reports are being downloaded
+    if 'configurablereportdata' in base_url:
+        url = 'https://www.commcarehq.org/a/%s/api/v0.5/configurablereportdata/%s/?format=JSON&limit=1' % (project, extra_data)
+        response = requests.get(url, headers=auth_header)
+        response_data = json.loads(response.content)
+        return response_data['total_records']
+    # Counts for forms and cases can be retrieved in the same way
+    else:
+        response = requests.get(base_url, headers=auth_header)
+        response_data = json.loads(response.content)
+        return response_data['meta']['total_count']
+
 
 
 def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, download_type, extra_data, update=False):
@@ -66,38 +74,14 @@ def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, downl
     # replace the record limit
     base_url = url.replace('limit=1', 'limit=' + str(record_limit))
 
-    # For reports, we need to save the current data so we can delete it after a
-    # successful import
-    if download_type == 'commcare_report' and update:
-        # current_data = LabelValueStore.objects(silo_id=silo.id)
-        # current_data = db.label_value_store.find({'silo_id':silo.id}, {'_id': 1}).to_array()
-        # print 'currentdata', current_data.count(), current_data
-        db.label_value_store.update({'silo_id':silo.id}, {'$set': {'silo_id':'old-'+str(silo.id)}}, multi=True)
-
     data_raw = fetchCommCareData(base_url, auth, auth_header,\
                     0, 10, record_limit, silo.id, read.id, \
-                    download_type, extra_data)
+                    download_type, extra_data, update)
     data_collects = data_raw.apply_async()
     data_retrieval = [v.get() for v in data_collects]
     columns = set()
     for data in data_retrieval:
         columns = columns.union(data)
-
-    if download_type == 'commcare_report' and update:
-        #delete the old data only if new data has been entered into MongoDB
-        if columns:
-            db.label_value_store.remove({'silo_id': 'old-'+str(silo.id)})
-        else:
-            db.label_value_store.update({'silo_id':'old-'+str(silo.id)}, {'$set': {'silo_id':silo.id}}, multi=True)
-        # new_data = db.label_value_store.find({'silo_id':silo.id})
-        # print 'new data', new_data.count, new_data
-        # delete_result = db.label_value_store.delete_many(current_data)
-        # print 'deleted?', delete_result.deleted_count
-        # # for dat in current_data:
-        #     print "deleting"
-        #     del_count = dat.delete()
-        #     print 'deleted this many', del_count
-        # current_data.delete()
 
     #add new columns to the list of current columns this is slower because
     #order has to be maintained (2n instead of n)

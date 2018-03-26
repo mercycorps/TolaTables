@@ -5,10 +5,11 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 from django.contrib.auth.models import User
 
-from silo.models import LabelValueStore, Read, Silo, ThirdPartyTokens, ColumnOrderMapping, siloHideFilter, ReadType
-from tola.util import getNewestDataDate
+from silo.models import LabelValueStore, Read, Silo, ThirdPartyTokens, ReadType
+from tola.util import getNewestDataDate, cleanKey, addColsToSilo
 
-from commcare.tasks import fetchCommCareData, addExtraFields
+from commcare.tasks import fetchCommCareData
+from commcare.util import getCommCareRecordCount
 
 class Command(BaseCommand):
     """
@@ -35,74 +36,45 @@ class Command(BaseCommand):
                 try:
                     commcare_token = ThirdPartyTokens.objects.get(user=silo.owner.pk, name="CommCare")
                 except Exception as e:
-                    self.stdout.write('No commcare api key for read, "%s"' % read.pk)
-                last_data_retrieved = str(getNewestDataDate(silo.id))[:10]
-                url = "/".join(read.read_url.split("/")[:8]) + "?date_modified_start=" + last_data_retrieved + "&" + "limit="
-                response = requests.get(url+ str(1), headers={'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}})
+                    self.stdout.write('No commcare api key for silo %s, read "%s"' % (silo.pk, read.pk))
+                    continue
+                url = read.read_url
+                auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
+
+                # get/build metadata based on download_type
+                if 'case' in url:
+                    last_data_retrieved = str(getNewestDataDate(silo.id))[:10]
+                    url = url + "&date_modified_start=" + last_data_retrieved
+                    download_type = 'case'
+                    record_count = getCommCareRecordCount(url, auth_header)
+                elif 'configurablereportdata' in url:
+                    download_type = 'commcare_report'
+                    url_parts = url.split('/')
+                    project = url_parts[4]
+                    report_id = url_parts[8]
+                    record_count = getCommCareRecordCount(url, auth_header, project, report_id)
+
+                if record_count == 0:
+                    self.stdout.write('No new commcare data for READ_ID, "%s"' % read.pk)
+                    continue
+
+                response = requests.get(url, headers=auth_header)
                 if response.status_code == 401:
                     commcare_token.delete()
-                    self.stdout.write('Incorrect commcare api key READ_ID, "%s"' % read.pk)
+                    self.stdout.write('Incorrect commcare api key for silo %s, read %s' % (silo.pk, read.pk))
                 elif response.status_code != 200:
-                    self.stdout.write('Falurie retrieving commcare data for READ_ID, "%s"' % read.pk)
-                metadata = json.loads(response.content)
-                if metadata['meta']['total_count'] == 0:
-                    self.stdout.write('No new commcare data for READ_ID, "%s"' % read.pk)
+                    self.stdout.write('Failure retrieving commcare data for silo %s, read %s' % (silo.pk, read.pk))
 
                 #Now call the update data function in commcare tasks
-                auth = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
-                url += "50"
-                data_raw = fetchCommCareData(url, auth, True, 0, metadata['meta']['total_count'], 50, silo.id, read.id, True)
+                data_raw = fetchCommCareData(
+                    url, auth_header, True, 0, record_count,
+                    50, silo.id, read.id, download_type, None, True
+                )
                 data_collects = data_raw.apply_async()
-                data_retrieval = [v.get() for v in data_collects]
-                columns = set()
-                for data in data_retrieval:
-                    columns = columns.union(data)
-                #correct the columns
-                try: columns.remove("")
-                except KeyError as e: pass
-                try: columns.remove("silo_id")
-                except KeyError as e: pass
-                try: columns.remove("read_id")
-                except KeyError as e: pass
-                for column in columns:
-                    if "." in column:
-                        columns.remove(column)
-                        columns.add(column.replace(".", "_"))
-                    if "$" in column:
-                        columns.remove(column)
-                        columns.add(column.replace("$", "USD"))
-                try:
-                    columns.remove("id")
-                    columns.add("user_assigned_id")
-                except KeyError as e: pass
-                try:
-                    columns.remove("_id")
-                    columns.add("user_assigned_id")
-                except KeyError as e: pass
-                try:
-                    columns.remove("edit_date")
-                    columns.add("editted_date")
-                except KeyError as e: pass
-                try:
-                    columns.remove("create_date")
-                    columns.add("created_date")
-                except KeyError as e: pass
-                #now mass update all the data in the database
+                new_colnames = set()
+                for colset in [set(v.get()) for v in data_collects]:
+                    new_colnames.update(colset)
+                cleaned_colnames = [cleanKey(name) for name in new_colnames]
+                addColsToSilo(silo, cleaned_colnames, )
 
-                addExtraFields.delay(list(columns), silo.id)
-                try:
-                    column_order_mapping = ColumnOrderMapping.objects.get(silo_id=silo.id)
-                    columns = columns.union(json.loads(column_order_mapping.ordering))
-                    column_order_mapping.ordering = json.dumps(list(columns))
-                    column_order_mapping.save()
-                except ColumnOrderMapping.DoesNotExist as e:
-                    ColumnOrderMapping.objects.create(silo_id=silo.id,ordering = json.dumps(list(columns)))
-                try:
-                    silo_hide_filter = siloHideFilter.objects.get(silo_id=silo.id)
-                    hidden_cols = set(json.loads(silo_hide_filter.hiddenColumns))
-                    hidden_cols.add("case_id")
-                    silo_hide_filter.hiddenColumns = json.dumps(list(hidden_cols))
-                    silo_hide_filter.save()
-                except siloHideFilter.DoesNotExist as e:
-                    siloHideFilter.objects.create(silo_id=silo.id, hiddenColumns=json.dumps(["case_id"]), hiddenRows="[]")
-                self.stdout.write('Successfully fetched the READ_ID, "%s", from CommCare' % read.pk)
+                self.stdout.write('Successfully fetched silo %s, read %s from CommCare' % (silo.pk, read.pk))

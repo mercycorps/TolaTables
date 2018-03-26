@@ -136,7 +136,6 @@ def saveDataToSilo(silo, data, read=-1, user=None):
 
             try:
                 lvs = LabelValueStore.objects.get(**filter_criteria)
-                #print("updating")
                 setattr(lvs, "edit_date", timezone.now())
                 lvs.read_id = read_source_id
             except LabelValueStore.DoesNotExist as e:
@@ -147,7 +146,6 @@ def saveDataToSilo(silo, data, read=-1, user=None):
             except LabelValueStore.MultipleObjectsReturned as e:
                 for k,v in filter_criteria.iteritems():
                     skipped_rows.add("%s=%s" % (str(k),str(v)))
-                #print("skipping")
                 continue
         else:
             lvs = LabelValueStore()
@@ -161,23 +159,6 @@ def saveDataToSilo(silo, data, read=-1, user=None):
         row = cleanDataObj(row, silo)
 
         for key, val in row.iteritems():
-            # if key == "" or key is None or key == "silo_id": continue
-            # elif key == "id" or key == "_id": key = "user_assigned_id"
-            # elif key == "edit_date": key = "editted_date"
-            # elif key == "create_date": key = "created_date"
-            # if type(val) == str or type(val) == unicode:
-            #     val = smart_str(val, strings_only=True).strip()
-            # if fieldToType.get(key, 'string') == 'int':
-            #     try:
-            #         val = int(val)
-            #     except ValueError as e:
-            #         continue
-            # if fieldToType.get(key, 'string') == 'double':
-            #     try:
-            #         val = float(val)
-            #     except ValueError as e:
-            #         continue
-
             if not isinstance(key, tuple):
                 if key not in keys:
                     keys.append(key)

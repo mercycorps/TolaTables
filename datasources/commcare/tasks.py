@@ -9,8 +9,8 @@ from django.conf import settings
 from pymongo import MongoClient
 from pymongo.operations import UpdateMany
 
-from tola.util import getColToTypeDict, cleanKey
-from silo.models import Silo
+from tola.util import getColToTypeDict, cleanKey, saveDataToSilo
+from silo.models import Silo, Read
 
 import requests
 import json
@@ -30,7 +30,6 @@ def fetchCommCareData(url, auth, auth_header, start, end, step, silo_id, read_id
     update -- if true use the update functioality instead of the regular store furnctionality
     form -- if None download case data, otherwise download form data and save only specified form
     """
-    print 'fetch params', [(k, locals()[k]) for k in locals().keys()]
     return group(requestCommCareData.s(url, offset, auth, auth_header, silo_id, read_id, download_type, extra_data, update, 0) \
             for offset in xrange(start,end,step))
 
@@ -55,7 +54,7 @@ def requestCommCareData(base_url, offset, auth, auth_header, silo_id, read_id, d
         data = json.loads(response.content)
     elif response.status_code == 429:
         if req_count > MAX_RETRIES:
-            raise ConnectionRefusedError
+            raise OSError
         else:
             time.sleep(1)
             req_count += 1
@@ -64,25 +63,27 @@ def requestCommCareData(base_url, offset, auth, auth_header, silo_id, read_id, d
         raise URLNotFoundError(url)
     else:
         if req_count > MAX_RETRIES:
-            raise ConnectionRefusedError
+            raise OSError
         else:
             #add something to this future error code stopping everything with throw exception
             time.sleep(1)
             req_count += 1
             return requestCommCareData(url, offset, auth, auth_header, silo_id, read_id, download_type, extra_data, update, req_count)
-    print 'dtype', download_type
+
     # Now get the properties of each data. Process form data and case data differently.
     if download_type == 'commcare_report':
-        return parseCommCareReportData(data, silo_id, read_id, update)
+
+        return parseCommCareReportData(data, silo_id, read_id, update, download_type)
     elif download_type == 'commcare_form':
-        return parseCommCareFormData(data, silo_id, read_id, update, extra_data)
+        return parseCommCareFormData(data, silo_id, read_id, update, extra_data, download_type)
     else:
-        return parseCommCareCaseData(data['objects'], silo_id, read_id, update)
+        return parseCommCareCaseData(data['objects'], silo_id, read_id, update, download_type)
 
 
 
 @shared_task()
-def parseCommCareCaseData(data, silo_id, read_id, update):
+def parseCommCareCaseData(data, silo_id, read_id, update, download_type):
+    print 'update in parsecase', update
     data_properties = []
     data_columns = set()
     for entry in data:
@@ -91,11 +92,11 @@ def parseCommCareCaseData(data, silo_id, read_id, update):
         except KeyError as e: pass
         data_properties[-1]["case_id"] = entry['case_id']
         data_columns.update(entry['properties'].keys())
-    storeCommCareData(data_properties, silo_id, read_id, update)
+    storeCommCareData(data_properties, silo_id, read_id, update, download_type)
     return list(data_columns)
 
 @shared_task()
-def parseCommCareFormData(data, silo_id, read_id, update, form_id):
+def parseCommCareFormData(data, silo_id, read_id, update, form_id, download_type):
     exclude_tags = ['case', 'meta']
     data_properties = []
     data_columns = set()
@@ -109,11 +110,12 @@ def parseCommCareFormData(data, silo_id, read_id, update, form_id):
         data_columns.update(filtered_data.keys())
         print 'data columns', data_columns
         print 'data proper', data_properties
-    storeCommCareData(data_properties, silo_id, read_id, update)
+    storeCommCareData(data_properties, silo_id, read_id, update, download_type)
     return list(data_columns)
 
 @shared_task()
-def parseCommCareReportData(data, silo_id, read_id, update):
+def parseCommCareReportData(data, silo_id, read_id, update, download_type):
+    print 'update in parsereport', update
     data_properties = []
     data_columns = set()
     column_mapper = {}
@@ -126,12 +128,12 @@ def parseCommCareReportData(data, silo_id, read_id, update):
         data_properties.append(renamed_row)
 
     data_columns = column_mapper.values()
-    storeCommCareData(data_properties, silo_id, read_id, update)
+    storeCommCareData(data_properties, silo_id, read_id, update, download_type)
     return data_columns
 
 
 @shared_task()
-def storeCommCareData(data, silo_id, read_id, update):
+def storeCommCareData(data, silo_id, read_id, update, download_type):
 
     data_refined = []
     try:
@@ -160,14 +162,19 @@ def storeCommCareData(data, silo_id, read_id, update):
     print 'updateer', update
     db = getattr(MongoClient(settings.MONGODB_URI), settings.TOLATABLES_MONGODB_NAME)
     if update:
-        for row in data_refined:
-            row['edit_date'] = timezone.now()
-            db.label_value_store.update(
-                {'silo_id' : silo_id,
-                'case_id' : row['case_id']},
-                {"$set" : row},
-                upsert=True
-            )
+        if download_type == 'case':
+            for row in data_refined:
+                row['edit_date'] = timezone.now()
+                db.label_value_store.update(
+                    {'silo_id' : silo_id, 'case_id' : row['case_id']},
+                    {"$set" : row},
+                    upsert=True
+                )
+        elif download_type == 'commcare_report':
+            silo = Silo.objects.get(id=silo_id)
+            read = Read.objects.get(id=read_id)
+            db.label_value_store.delete_many({'silo_id': silo.pk})
+            skipped_rows = saveDataToSilo(silo, data_refined, read)
     else:
 
         for row in data_refined:

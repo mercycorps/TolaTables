@@ -48,7 +48,7 @@ from tola.util import importJSON, saveDataToSilo, getSiloColumnNames,\
 
 
 from commcare.tasks import fetchCommCareData
-from commcare.util import getCommCareReportCount, getCommCareDataHelper
+from commcare.util import getCommCareRecordCount, getCommCareDataHelper
 
 from .models import Silo, Read, ReadType, ThirdPartyTokens, LabelValueStore, Tag, UniqueFields, MergedSilosFieldMapping, TolaSites, PIIColumn, DeletedSilos, FormulaColumn
 from .forms import get_read_form, UploadForm, SiloForm, MongoEditForm, NewColumnForm, EditColumnForm, OnaLoginForm
@@ -1000,14 +1000,18 @@ def updateSiloData(request, pk):
             #from ones where we got data delete those records
             unique_field_exist = silo.unique_fields.exists()
             #Unique field means keep the data and update as necessary (which is already implimented so its not necessary to delete anything)
-            if  unique_field_exist == False:
-                lvs = LabelValueStore.objects(silo_id=silo.pk,__raw__={"read_id" : { "$exists" : "true", "$in" : sources_to_delete }})
-                lvs.delete()
 
-            #put in the new records
-            for x in range(0,len(data[0])):
-                for entry in data[1][x]:
-                    saveDataToSilo(silo,entry,data[0][x],request.user)
+            # Save new records and delete old ones unless it's CommCare. In that
+            # case, those functions are handled within the celery tasks.
+            if read.type.read_type != 'CommCare':
+                if  unique_field_exist == False:
+                    lvs = LabelValueStore.objects(silo_id=silo.pk,__raw__={"read_id" : { "$exists" : "true", "$in" : sources_to_delete }})
+                    lvs.delete()
+
+                for x in range(0,len(data[0])):
+                    for entry in data[1][x]:
+                        saveDataToSilo(silo,entry,data[0][x],request.user)
+
             for read in reads:
                 if read.type.read_type == "GSheet Import":
                     greturn = import_from_gsheet_helper(request.user, silo.id, None, read.resource_id, None, True)
@@ -1079,12 +1083,13 @@ def importDataFromRead(request, silo, read):
             report_id = url_parts[8]
             print 'project and repot id', project, report_id
             # https://www.commcarehq.org/a/mercycorpsnigeria/api/v0.5/configurablereportdata/bb8473fc3ef63eda59105315e91cb672?format=JSON
-            data_count = getCommCareReportCount(project, auth_header, report_id)
+            data_count = getCommCareRecordCount(url, auth_header, project, report_id)
             helper_msgs = getCommCareDataHelper(url, auth_header, True, data_count, silo, read, 'commcare_report', report_id, update=True)
-            print 'report ret1 and 2', helper_msgs[0], helper_msgs[1]
+            print 'report ret1 and 2 and overall: ', helper_msgs[0], helper_msgs[1], helper_msgs
             #messages.add_message(request,ret[0],ret[1])
             #need to impliment if import failure
-            return (None,2,(helper_msgs[0], helper_msgs[1]))
+
+            return (None, 1, helper_msgs)
 
         else:
             last_data_retrieved = str(getNewestDataDate(silo.id))[:10]
@@ -1143,7 +1148,7 @@ def importDataFromRead(request, silo, read):
             addColsToSilo(silo, columns)
             hideSiloColumns(silo, columns)
 
-            return (None,2,(messages.SUCCESS, "%i commcare records were successfully updated" % metadata['meta']['total_count']))
+            return (None,1,(messages.SUCCESS, "%i commcare records were successfully updated" % metadata['meta']['total_count']))
     else:
         return (None,0,(messages.ERROR,"%s does not support update data functionality. You will have to reinport the data manually" % read.type.read_type))
 

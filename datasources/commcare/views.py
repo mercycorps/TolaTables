@@ -19,7 +19,7 @@ from django.contrib.auth.decorators import login_required
 from silo.models import Silo, Read, ReadType, ThirdPartyTokens
 from .forms import CommCareAuthForm, CommCareProjectForm
 from .tasks import fetchCommCareData, requestCommCareData
-from .util import getCommCareDataHelper, getCommCareReportIDs, getCommCareReportCount
+from .util import getCommCareDataHelper, getCommCareReportIDs, getCommCareRecordCount
 
 @login_required
 def getCommCareAuth(request):
@@ -144,22 +144,15 @@ def getCommCareData(request):
             if download_type == 'commcare_report':
                 url = base_url % (project, 'configurablereportdata')
                 url = url + report_id + '/?format=JSON&limit=1'
-                data_count = getCommCareReportCount(project, auth_header, report_id)
+                data_count = getCommCareRecordCount(url, auth_header, project, report_id)
             elif download_type == 'commcare_form':
                 url = base_url % (project, 'form')
                 url = url + '?limit=1'
-                print 'theurl=', url
-                response = requests.get(url, headers=auth_header)
-                print "the response", response
-                response_data = json.loads(response.content)
-                data_count = response_data['meta']['total_count']
-                print "datacount for the form", data_count
+                data_count = getCommCareRecordCount(url, auth_header)
             else:
                 url = base_url % (project, 'case')
                 url = url + '?format=JSON&limit=1'
-                response = requests.get(url, headers=auth_header)
-                response_data = json.loads(response.content)
-                data_count = response_data.get('meta').get('total_count')
+                data_count = getCommCareRecordCount(url, auth_header)
 
             if download_type == 'commcare_report':
                 read_name = '%s report - %s' % (project, report_name)
