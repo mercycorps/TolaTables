@@ -4,22 +4,20 @@ import urllib
 import base64
 
 from requests.auth import HTTPDigestAuth
-from django.http import HttpResponseRedirect, HttpResponseBadRequest, HttpResponse
-
-
-from tola.util import saveDataToSilo, getSiloColumnNames
-from django.shortcuts import redirect, render
-from django.core.urlresolvers import reverse, reverse_lazy
 
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.core.urlresolvers import reverse, reverse_lazy
+from django.http import HttpResponseRedirect, HttpResponseBadRequest, HttpResponse
+from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.datastructures import MultiValueDictKeyError
-from django.contrib.auth.decorators import login_required
 
 from silo.models import Silo, Read, ReadType, ThirdPartyTokens
-from .forms import CommCareAuthForm, CommCareProjectForm
-from .tasks import fetchCommCareData, requestCommCareData
-from .util import getCommCareDataHelper, getCommCareReportIDs, getCommCareRecordCount
+from tola.util import saveDataToSilo, getSiloColumnNames
+from commcare.forms import CommCareAuthForm, CommCareProjectForm
+from commcare.tasks import fetchCommCareData, requestCommCareData
+from commcare.util import getCommCareDataHelper, getCommCareReportIDs, getCommCareRecordCount
 
 @login_required
 def getCommCareAuth(request):
@@ -36,12 +34,19 @@ def getCommCareAuth(request):
 
         if form.is_valid():
             # test validity of token by trying to grab some data
-            ping_url = 'https://www.commcarehq.org/a/%s/api/v0.5/case/?limit=1' % request.POST['project']
-            headers = {'Authorization': 'ApiKey %(u)s:%(a)s' % \
-                {'u' : request.POST['username'], 'a' : request.POST['auth_token']}}
+            ping_url = 'https://www.commcarehq.org/a/%s/api/v0.5/case/?limit=1' \
+                % request.POST['project']
+            headers = {'Authorization': 'ApiKey %(u)s:%(a)s' % {
+                    'u' : request.POST['username'],
+                    'a' : request.POST['auth_token']
+                }
+            }
             response = requests.get(ping_url, headers=headers)
             if response.status_code == 401:
-                messages.error(request, "Invalid username, authorization token or project.")
+                messages.error(
+                    request,
+                    "Invalid username, authorization token or project."
+                )
                 form = CommCareAuthForm()
             elif response.status_code == 200:
                 print 'req post', request.POST
@@ -97,6 +102,7 @@ def getCommCareData(request):
 
     user_id = request.user.id
 
+    # If the token can't be retrieved, redirect them to the auth page.
     try:
         commcare_token = ThirdPartyTokens.objects.get(user_id=request.user, name='CommCare')
     except (ThirdPartyTokens.MultipleObjectsReturned, ThirdPartyTokens.DoesNotExist):
@@ -106,7 +112,7 @@ def getCommCareData(request):
     if request.method == 'POST':
 
         silo_id = int(request.POST.get("silo", None))
-        if silo_id == 0:
+        if silo_id == -1:
             silo_id = None
 
         commcare_token = ThirdPartyTokens.objects.get(user=request.user, name=provider)
@@ -133,7 +139,6 @@ def getCommCareData(request):
         )
 
         if form.is_valid():
-
 
             if report_id != 'default':
                 report_name = report_map[report_id]
@@ -177,7 +182,7 @@ def getCommCareData(request):
             if read_created:
                 read.save()
 
-            requested_silo_name = request.POST.get('new_silo_name', None)
+            requested_silo_name = request.POST.get('new_table_name', None)
             silo, silo_created = Silo.objects.get_or_create(id=silo_id, defaults={"name": requested_silo_name, "public": False, "owner": request.user})
             if silo_created or read_created:
                 silo.reads.add(read)

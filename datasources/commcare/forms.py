@@ -68,13 +68,20 @@ class CommCareProjectForm(forms.Form):
         download_type = cleaned_data.get('download_type')
         commcare_report_name = cleaned_data.get('commcare_report_name')
         commcare_form_name = cleaned_data.get('commcare_form_name')
+        new_table_name = cleaned_data.get('new_table_name')
         silo = cleaned_data.get('silo')
         print 'silothing', silo
         print 'commrptnam, type', commcare_report_name, download_type
         if download_type == 'commcare_report' and commcare_report_name == 'default':
             self.add_error('commcare_report_name', "You must choose a report from the dropdown")
             raise forms.ValidationError("Your submission has errors")
-        
+        if silo == 0:
+            self.add_error('silo', "You must select or create a Table")
+            raise forms.ValidationError("Your submission has errors")
+        if silo == "-1" and new_table_name == '':
+            self.add_error('new_table_name', "When creating a new table, you must provide a Table name")
+            raise forms.ValidationError("Your submission has errors")
+
         return cleaned_data
 
 
