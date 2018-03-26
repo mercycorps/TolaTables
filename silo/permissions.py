@@ -1,5 +1,6 @@
 from rest_framework import permissions
 
+
 class IsOwnerOrReadOnly(permissions.BasePermission):
     """
     Custom permission to only allow owners of an object to edit it.
@@ -36,7 +37,8 @@ class Silo_IsOwnerOrCanRead(permissions.BasePermission):
         permitted = [obj.owner == request.user]
         permitted.append(request.user.is_superuser)
         permitted.append(obj.public)
-        permitted.append(request.user.id in obj.shared.values_list('id', flat=True))
+        permitted.append(request.user.id in obj.shared.values_list(
+            'id', flat=True))
 
         return any(permitted)
 
@@ -54,6 +56,10 @@ class Read_IsOwnerViewOrWrite(permissions.BasePermission):
         permitted.append(request.user.is_superuser)
 
         if request.method in ['GET', 'HEAD']:
-            permitted.append(obj.silos__public)
-            permitted.append(request.user.id in obj.silos__shared.values_list('id', flat=True))
+            permitted.extend([silo.public for silo in obj.silos.all()])
+            shared_with_users = [list(silo.shared.values_list(
+                'id', flat=True)) for silo in obj.silos.all()]
+            permitted.extend([request.user.id in userlist for userlist in
+                             shared_with_users])
+
         return any(permitted)
