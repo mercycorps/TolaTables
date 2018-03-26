@@ -34,6 +34,7 @@ class ListTextWidget(forms.TextInput):
 class CommCareProjectForm(forms.Form):
     project = forms.CharField(required=True, help_text=mark_safe("This is the name of the project you are importing from. Press the down arrow to see the name of past projects you have imported from. The projects your account has access to are listed in your CommCare <a href='https://www.commcarehq.org/account/projects/' target='_blank'>settings</a> under my projects.<br/>If you are not getting access it could be because your project has a different name then what you as a user can see. To see your projects true name go to CommCare <a href='https://www.commcarehq.org/account/projects/' target='_blank'>settings</a>"))
     silo = forms.ChoiceField(required=True)
+    new_table_name = forms.CharField(required=False)
 
     # TYPE_CHOICES = [('commcare_report', 'Report'), ('commcare_form', 'Form'), ('cases', 'Cases')]
     TYPE_CHOICES = [('commcare_report', 'Report'), ('cases', 'Cases')]
@@ -59,6 +60,7 @@ class CommCareProjectForm(forms.Form):
         self.fields['project'].widget = ListTextWidget(data_list=getProjects(user_id), name='projects')
         self.fields['silo'].choices = silo_choices
         self.fields['silo'].label = 'Table'
+        self.fields['new_table_name'].label = 'New Table Name'
         self.fields['commcare_report_name'].choices = report_choices
 
     def clean(self):
@@ -72,10 +74,7 @@ class CommCareProjectForm(forms.Form):
         if download_type == 'commcare_report' and commcare_report_name == 'default':
             self.add_error('commcare_report_name', "You must choose a report from the dropdown")
             raise forms.ValidationError("Your submission has errors")
-        if str(silo) == str(-1):
-            self.add_error('silo', "You must choose a Table or create a new one")
-            raise forms.ValidationError("Your submission has errors")
-
+        
         return cleaned_data
 
 

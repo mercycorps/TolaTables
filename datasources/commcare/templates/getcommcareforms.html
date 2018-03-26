@@ -42,41 +42,34 @@
 {% block extra_js_in_body %}
     <script type="text/javascript">
         $(document).ready(function() {
-            var downloadType = $("input[type=radio][name=download_type]");
-            console.log ('checked, val', downloadType.checked, downloadType.val());
-            // if (downloadType.val() == 'report' && downloadType.checked == true) {
-            //     $("#div_id_commcare_report_name").css("display", "inherit");
-            //     $("#div_id_commcare_form_name").css("display", "none");
-            // }
-            // else if (downloadType.val() == 'form' && downloadType.checked == true) {
-            //     $("#div_id_commcare_report_name").css("display", "none");
-            //     $("#div_id_commcare_form_name").css("display", "inherit");
-            // }
-            // else {
-            //     $("#div_id_commcare_report_name").css("display", "none");
-            //     $("#div_id_commcare_form_name").css("display", "none");
-            // }
 
-            //This jquery function controls the dropdown menu in crispy_forms
-            $('select[id="id_silo"]').on("change", function() {
-                var select_obj = $("#" + this.id);
-                var silo_id =  select_obj.val();
-                if (silo_id < 0) {
-                    var new_silo_name = prompt("Enter the name of your name silo");
-                    if (new_silo_name) {
-                      var num_options = select_obj.children("option").length;
-                      select_obj.find('option:eq(0)').text(new_silo_name)
-                      // console.log('form', select_obj.closest('form'))
-                      var form = select_obj.closest('form')
-                      form.append($('<input type="hidden">')
-                          .attr({name: 'new_silo_name', value: new_silo_name}))
-                      select_obj.val(0)
-                    }
+            // If the form is returned with errors, make sure the appropriate
+            // form or report name field is exposed.
+            var downloadType = $("input[type=radio][name=download_type]");
+            if ($("#id_download_type_1").attr("checked") == "checked") {
+                $("#div_id_commcare_report_name").show();
+                $("#div_id_commcare_form_name").hide();
+            }
+            // else if ($("#id_download_type_2").attr("checked") == "checked") {
+            //     $("#div_id_commcare_report_name").hide();
+            //     $("#div_id_commcare_form_name").show();
+            // }
+            else {
+                $("#div_id_commcare_report_name").hide();
+                $("#div_id_commcare_form_name").hide();
+            }
+
+            //Reveal the new table name input only if they have chosen to add a silo
+            $("#id_silo").on("change", function() {
+                if ($("#id_silo").val() == "-1"){
+                  $("#div_id_new_table_name").show();
+                }
+                else {
+                  $("#div_id_new_table_name").hide();
                 }
             });
 
             $('input[id="id_project"]').on("change", function() {
-                console.log('projvalue = ', $('#' + this.id).val());
                 url = '/commcare/report_names/?project=';
                 url += $('#' + this.id).val();
 
@@ -104,18 +97,17 @@
         });
 
         $("input[type=radio][name=download_type]").on("change", function(){
-            console.log('value, checked', this.value, this.checked)
             if (this.value == 'commcare_report'){
-                $("#div_id_commcare_report_name").css("display", "inherit");
-                $("#div_id_commcare_form_name").css("display", "none");
+                $("#div_id_commcare_report_name").show();
+                $("#div_id_commcare_form_name").hide();
             }
             else if (this.value == 'commcare_form') {
-              $("#div_id_commcare_form_name").css("display", "inherit");
-              $("#div_id_commcare_report_name").css("display", "none");
+              $("#div_id_commcare_form_name").show();
+              $("#div_id_commcare_report_name").hide();
             }
             else {
-              $("#div_id_commcare_report_name").css("display", "none");
-              $("#div_id_commcare_form_name").css("display", "none");
+              $("#div_id_commcare_report_name").hide();
+              $("#div_id_commcare_form_name").hide();
             }
         });
 

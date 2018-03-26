@@ -110,7 +110,8 @@ def getCommCareData(request):
             silo_id = None
 
         commcare_token = ThirdPartyTokens.objects.get(user=request.user, name=provider)
-        auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
+        auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % \
+            {'u' : commcare_token.username, 'a' : commcare_token.token}}
         project = request.POST['project']
         try:
             report_id = request.POST['commcare_report_name']
@@ -125,7 +126,11 @@ def getCommCareData(request):
             # report_choices = [(k, v) for k,v in report_map.iteritems()]
         except KeyError:
             commcare_form_id = False
-        form = CommCareProjectForm(request.POST, silo_choices=silo_choices, report_choices=report_choices, user_id=user_id)
+
+        form = CommCareProjectForm(
+            request.POST, silo_choices=silo_choices,
+            report_choices=report_choices, user_id=user_id
+        )
 
         if form.is_valid():
 
@@ -144,7 +149,9 @@ def getCommCareData(request):
             if download_type == 'commcare_report':
                 url = base_url % (project, 'configurablereportdata')
                 url = url + report_id + '/?format=JSON&limit=1'
-                data_count = getCommCareRecordCount(url, auth_header, project, report_id)
+                data_count = getCommCareRecordCount(
+                    url, auth_header, project, report_id
+                )
             elif download_type == 'commcare_form':
                 url = base_url % (project, 'form')
                 url = url + '?limit=1'
@@ -160,8 +167,13 @@ def getCommCareData(request):
                 read_name = '%s form - %s' % (project, report_name)
             else:
                 read_name = project + ' cases'
-            read, read_created = Read.objects.get_or_create(read_name=read_name, owner=user,
-            defaults={'read_url': url, 'type': ReadType.objects.get(read_type=provider), 'description': ""})
+            read, read_created = Read.objects.get_or_create(
+                read_name=read_name, owner=user,defaults={
+                    'read_url': url,
+                    'type': ReadType.objects.get(read_type=provider),
+                    'description': ""
+                }
+            )
             if read_created:
                 read.save()
 
