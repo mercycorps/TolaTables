@@ -71,40 +71,29 @@
             $("#id_silo").on("change", function() {
                 if ($("#id_silo").val() == "-1"){
                   $("#div_id_new_table_name").show();
+                  $("#id_new_table_name").focus();
                 }
                 else {
                   $("#div_id_new_table_name").hide();
                 }
             });
 
-            // Once the project has been specified, we can retrieve the list of
-            // reports from CommCare. Doing it here rather than on radio button
-            // change event to avoid an api call on each radio select.
+            // Once the project has been specified (or if it's part of the
+            // querystring because the user just provided their API key),
+            // we can retrieve the list of reports from CommCare.
+            // Doing it here rather than on radio button avoids doing an api
+            // call on each radio select.
+            base_url = '/commcare/report_names/?project=';
             $('input[id="id_project"]').on("change", function() {
-                url = '/commcare/report_names/?project=';
-                url += $('#' + this.id).val();
-
-                $.ajax({
-                    url: url,
-                    type: "GET",
-                    // headers: headers,
-                    dataType: "JSON",
-                    complete: function(data, status) {
-                        if (status == "success") {
-                            console.log('thisis data', data.responseJSON)
-                            var options = ['<option value=default>Select a Report</option>'];
-                            $.each(data.responseJSON, function (id, name) {
-                                options.push('<option value=' + id + '>' + name + '</option>');
-                            });
-                            console.log('tablenames', options);
-                            $('#id_commcare_report_name').html(options.join('\n'));
-                        } else {
-                            console.log("something weird happened");
-                        }
-                    }
-                });
+                url = base_url + $('#' + this.id).val();
+                getReportNames(url)
             });
 
+            programMatch = window.location.href.match(/project=([^\&]+)/)
+            if (programMatch) {
+                url = base_url + programMatch[1];
+                getReportNames(url)
+            }
         });
 
         // Reveal the appropriate input field; depends on the download type
@@ -113,10 +102,12 @@
             if (this.value == 'commcare_report'){
                 $("#div_id_commcare_report_name").show();
                 $("#div_id_commcare_form_name").hide();
+                $("#id_commcare_report_name").focus();
             }
             else if (this.value == 'commcare_form') {
               $("#div_id_commcare_form_name").show();
               $("#div_id_commcare_report_name").hide();
+              $("#id_commcare_form_name").focus();
             }
             else {
               $("#div_id_commcare_report_name").hide();
@@ -124,6 +115,26 @@
             }
         });
 
+        // Use a CommCare API to get the report names for the dropdown
+        var getReportNames = function(url){
+            $.ajax({
+                url: url,
+                type: "GET",
+                // headers: headers,
+                dataType: "JSON",
+                complete: function(data, status) {
+                    if (status == "success") {
+                        var options = ['<option value=default>Select a Report</option>'];
+                        $.each(data.responseJSON, function (id, name) {
+                            options.push('<option value=' + id + '>' + name + '</option>');
+                        });
+                        $('#id_commcare_report_name').html(options.join('\n'));
+                    } else {
+                        console.log("something weird happened");
+                    }
+                }
+            });
+        };
 
     </script>
 {% endblock %}
