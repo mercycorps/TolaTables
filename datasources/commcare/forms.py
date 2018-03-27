@@ -60,8 +60,10 @@ class CommCareProjectForm(forms.Form):
         self.fields['project'].widget = ListTextWidget(data_list=getProjects(user_id), name='projects')
         self.fields['silo'].choices = silo_choices
         self.fields['silo'].label = 'Table'
-        self.fields['new_table_name'].label = 'New Table Name'
+        self.fields['new_table_name'].label = 'New table name*'
         self.fields['commcare_report_name'].choices = report_choices
+        self.fields['commcare_report_name'].label = 'CommCare report name*'
+        self.fields['commcare_form_name'].label = 'CommCare form name*'
 
     def clean(self):
         cleaned_data = super(CommCareProjectForm, self).clean()

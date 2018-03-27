@@ -63,7 +63,7 @@
                 $("#div_id_new_table_name").show();
             }
             else {
-                $("#div_id_commcare_form_name").hide();
+                $("#div_id_new_table_name").hide();
             }
 
 
@@ -72,6 +72,7 @@
                 if ($("#id_silo").val() == "-1"){
                   $("#div_id_new_table_name").show();
                   $("#id_new_table_name").focus();
+
                 }
                 else {
                   $("#div_id_new_table_name").hide();
@@ -86,13 +87,13 @@
             base_url = '/commcare/report_names/?project=';
             $('input[id="id_project"]').on("change", function() {
                 url = base_url + $('#' + this.id).val();
-                getReportNames(url)
+                getReportNames(url);
             });
 
-            programMatch = window.location.href.match(/project=([^\&]+)/)
+            programMatch = window.location.href.match(/project=([^\&]+)/);
             if (programMatch) {
                 url = base_url + programMatch[1];
-                getReportNames(url)
+                getReportNames(url);
             }
         });
 
