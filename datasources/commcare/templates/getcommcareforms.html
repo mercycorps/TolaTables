@@ -42,6 +42,19 @@
 {% block extra_js_in_body %}
     <script type="text/javascript">
         $(document).ready(function() {
+            // For some reason crispy forms is applying the form id to a div
+            $("#div_id_download_type > div[action='/commcare/']").attr("id", "div_inner_id_download_type")
+
+            //Create the div that displays the report lookup error message.
+            //It's inside a hidden div so it won't appear on load.
+            $("#div_id_commcare_report_name > div.controls").append(
+                '<div id="div_error_id_reports_not_found" class="has-error col-sm-8" style="padding-left:0px">'
+                    + '<span style="margin-top:0px" id="error_id_reports_not_found" class="help-block">'
+                    +   '<strong>Reports not found.  Are you sure you picked the right project?</strong>'
+                    + '</span>'
+                + '</div>'
+            );
+
 
             // If the form is returned with errors, make sure the appropriate
             // text input boxes are displayed.
@@ -107,7 +120,14 @@
                 $("#div_id_commcare_report_name").show();
                 $("#div_id_commcare_form_name").hide();
                 $("#id_commcare_report_name").focus();
+                if ( $("#id_commcare_report_name option").length > 1 ) {
+                    $("#div_error_id_reports_not_found").hide();
+                }
+                else {
+                    $("#div_error_id_reports_not_found").show();
+                }
             }
+
             else if (this.value == 'commcare_form') {
               $("#div_id_commcare_form_name").show();
               $("#div_id_commcare_report_name").hide();
@@ -133,9 +153,8 @@
                             options.push('<option value=' + id + '>' + name + '</option>');
                         });
                         $('#id_commcare_report_name').html(options.join('\n'));
-                    } else {
-                        console.log("something weird happened");
-                    }
+                    };
+                    $("input[type=radio][name=download_type]").change();
                 }
             });
         };

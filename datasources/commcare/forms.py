@@ -49,8 +49,8 @@ class CommCareProjectForm(forms.Form):
         report_choices = kwargs.pop('report_choices', '')
         self.helper = FormHelper()
         self.helper.form_class = 'form-horizontal'
-        self.helper.label_class = 'col-sm-2'
-        self.helper.field_class = 'col-sm-10'
+        self.helper.label_class = 'col-sm-3'
+        self.helper.field_class = 'col-sm-8'
         self.helper.form_method = 'post'
         self.helper.form_id = 'commcare-import-form'
         self.helper.form_action = reverse_lazy('getCommCareData')
@@ -78,10 +78,10 @@ class CommCareProjectForm(forms.Form):
             self.add_error('commcare_report_name', "You must choose a report from the dropdown")
             raise forms.ValidationError("Your submission has errors")
         if silo == 0:
-            self.add_error('silo', "You must select or create a Table")
+            self.add_error('silo', "You must select or create a Table.")
             raise forms.ValidationError("Your submission has errors")
         if silo == "-1" and new_table_name == '':
-            self.add_error('new_table_name', "When creating a new table, you must provide a Table name")
+            self.add_error('new_table_name', "When creating a new table, you must provide a Table name.")
             raise forms.ValidationError("Your submission has errors")
 
         return cleaned_data

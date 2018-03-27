@@ -49,7 +49,6 @@ def getCommCareAuth(request):
                 )
                 form = CommCareAuthForm()
             elif response.status_code == 200:
-                print 'req post', request.POST
                 commcare_token = ThirdPartyTokens(
                     name = provider,
                     user_id = request.user.id,
@@ -58,7 +57,6 @@ def getCommCareAuth(request):
                 )
                 commcare_token.save()
                 redirect_url = reverse('getCommCareData') + '?project=%s' % request.POST['project']
-                print 'rdirurl', redirect_url
                 return redirect(redirect_url)
         else:
             messages.error(request, "You have invalid values in your form. Please try again.")
@@ -119,10 +117,10 @@ def getCommCareData(request):
         auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % \
             {'u' : commcare_token.username, 'a' : commcare_token.token}}
         project = request.POST['project']
+        report_choices = [('default', 'Select a Report')]
         try:
             report_id = request.POST['commcare_report_name']
             report_map = getCommCareReportIDs(project, auth_header)
-            report_choices = [('default', 'Select a Report')]
             report_choices.extend([(k, v) for k,v in report_map.iteritems()])
         except KeyError:
             report_id = False
@@ -234,6 +232,7 @@ def get_commcare_report_names(request):
 
     project = request.GET['project']
     commcare_token = ThirdPartyTokens.objects.get(user=request.user, name='CommCare')
-    auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
+    auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % \
+        {'u' : commcare_token.username, 'a' : commcare_token.token}}
     reports = getCommCareReportIDs(project, auth_header)
     return HttpResponse(json.dumps(reports))

@@ -33,8 +33,11 @@ def getCommCareReportIDs(project_name, header):
     response = requests.get(url, headers=header)
     response_data = json.loads(response.content)
     report_ids = {}
-    for rpt_info in response_data['objects']:
-        report_ids[rpt_info['id']] = rpt_info['title']
+    try:
+        for rpt_info in response_data['objects']:
+            report_ids[rpt_info['id']] = rpt_info['title']
+    except KeyError:
+        pass
     return report_ids
 
 # Rectrieve record counts for commcare download.
