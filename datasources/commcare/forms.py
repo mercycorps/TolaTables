@@ -4,7 +4,7 @@ from django.core.urlresolvers import reverse_lazy
 from django.forms import ModelForm
 from django import forms
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, Div, Submit, Reset, HTML, Button, Row, Field, Hidden, Fieldset
+from crispy_forms.layout import Layout, Div, Submit, Reset, HTML, Button, Row, Field, Hidden
 from crispy_forms.bootstrap import FormActions
 from django.forms.formsets import formset_factory
 from django.utils.safestring import mark_safe
@@ -32,7 +32,21 @@ class ListTextWidget(forms.TextInput):
 
 
 class CommCareProjectForm(forms.Form):
-    project = forms.CharField(required=True, help_text=mark_safe("This is the name of the project you are importing from. Press the down arrow to see the name of past projects you have imported from. The projects your account has access to are listed in your CommCare <a href='https://www.commcarehq.org/account/projects/' target='_blank'>settings</a> under my projects.<br/>If you are not getting access it could be because your project has a different name then what you as a user can see. To see your projects true name go to CommCare <a href='https://www.commcarehq.org/account/projects/' target='_blank'>settings</a>"))
+    project = forms.CharField(required=True, help_text=mark_safe(
+        """
+        This is the name of the project you are importing from. Press the
+        down arrow to see the name of past projects you have imported from.
+        The projects your account has access to are listed in your CommCare
+        <a href='https://www.commcarehq.org/account/projects/'
+        target='_blank'>settings</a> under my projects.
+        <br/><br/>
+        If you are not getting access it could be because your project has
+        a different name then what you as a user can see. To see
+        your projects true name go to CommCare
+        <a href='https://www.commcarehq.org/account/projects/'
+        target='_blank'>settings</a>
+        """
+    ))
     silo = forms.ChoiceField(required=True)
     new_table_name = forms.CharField(required=False)
 

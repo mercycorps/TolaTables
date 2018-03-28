@@ -8,7 +8,8 @@ from requests.auth import HTTPDigestAuth
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.urlresolvers import reverse, reverse_lazy
-from django.http import HttpResponseRedirect, HttpResponseBadRequest, HttpResponse
+from django.http import HttpResponseRedirect, HttpResponseBadRequest, \
+    HttpResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.datastructures import MultiValueDictKeyError
@@ -17,7 +18,8 @@ from silo.models import Silo, Read, ReadType, ThirdPartyTokens
 from tola.util import saveDataToSilo, getSiloColumnNames
 from commcare.forms import CommCareAuthForm, CommCareProjectForm
 from commcare.tasks import fetchCommCareData, requestCommCareData
-from commcare.util import getCommCareDataHelper, getCommCareReportIDs, getCommCareRecordCount
+from commcare.util import getCommCareDataHelper, getCommCareReportIDs, \
+    getCommCareRecordCount
 
 @login_required
 def getCommCareAuth(request):
@@ -56,27 +58,33 @@ def getCommCareAuth(request):
                     username = request.POST['username']
                 )
                 commcare_token.save()
-                redirect_url = reverse('getCommCareData') + '?project=%s' % request.POST['project']
+                redirect_url = reverse('getCommCareData') + \
+                    '?project=%s' % request.POST['project']
                 return redirect(redirect_url)
         else:
-            messages.error(request, "You have invalid values in your form. Please try again.")
+            messages.error(request, "You have invalid values in your form. \
+                Please try again.")
             return render(request, 'getCommCareAuth', {'form': form})
 
     else:
         try:
             #look for authorization token
-            commcare_token = ThirdPartyTokens.objects.get(user=request.user,name=provider)
+            commcare_token = ThirdPartyTokens.objects.get(
+                user=request.user, name=provider
+            )
             return redirect('getCommCareData')
 
-        #Catch an issue where there is more than one token in the DB.  This should never happen, but just in case.
+        # Catch an issue where there is more than one token in the DB.
+        # This should never happen, but just in case.
         except ThirdPartyTokens.MultipleObjectsReturned:
-            messages.error(request, "There was a problem with your login.  Please re-enter your information.")
+            messages.error(request,
+                "There was a problem with your login.  \
+                Please re-enter your information.")
             form = CommCareAuthForm()
         except ThirdPartyTokens.DoesNotExist:
             form = CommCareAuthForm()
 
         return render(request, 'getcommcareforms.html', {'form': form})
-
 
     return render(request, 'getcommcareforms.html', {'form': form})
 
@@ -87,8 +95,6 @@ def getCommCareData(request):
     :param request:
     :return: list of Ona forms paired with action buttons
     """
-
-    # TODO:  probably need to permit users to have multiple tokens, but with unique combo of username and provider
 
     provider = "CommCare"
 
@@ -102,8 +108,12 @@ def getCommCareData(request):
 
     # If the token can't be retrieved, redirect them to the auth page.
     try:
-        commcare_token = ThirdPartyTokens.objects.get(user_id=request.user, name='CommCare')
-    except (ThirdPartyTokens.MultipleObjectsReturned, ThirdPartyTokens.DoesNotExist):
+        commcare_token = ThirdPartyTokens.objects.get(
+            user_id=request.user, name='CommCare'
+        )
+    except (ThirdPartyTokens.MultipleObjectsReturned,
+            ThirdPartyTokens.DoesNotExist
+    ):
         return redirect('getCommCareAuth')
 
 
@@ -113,7 +123,6 @@ def getCommCareData(request):
         if silo_id == -1:
             silo_id = None
 
-        commcare_token = ThirdPartyTokens.objects.get(user=request.user, name=provider)
         auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % \
             {'u' : commcare_token.username, 'a' : commcare_token.token}}
         project = request.POST['project']
@@ -199,7 +208,8 @@ def getCommCareData(request):
         #     for m in messages.get_messages(request):
         #         print 'm e ss', m
         #     messages.error(request, "Could not get data")
-        return render(request, 'getcommcareforms.html', {'form': form})
+        return render(request, 'getcommcareforms.html',
+                        {'form': form, 'auth': 'authenticated'})
 
     else:
         user_id = request.user.id
@@ -212,7 +222,8 @@ def getCommCareData(request):
         except:
             pass
 
-        return render(request, 'getcommcareforms.html', {'form': form})
+        return render(request, 'getcommcareforms.html',
+                        {'form': form, 'auth': 'authenticated'})
 
 
 @login_required
