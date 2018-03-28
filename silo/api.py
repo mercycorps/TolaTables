@@ -205,7 +205,12 @@ class ReadViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_superuser:
             return Read.objects.all()
-        return Read.objects.filter(Q(owner=user) | Q(silos__public=True) | Q(silos__shared=self.request.user))
+
+        return Read.objects.filter(
+            Q(owner=user) |
+            Q(silos__public=True) |
+            Q(silos__shared=self.request.user)
+        ).distinct()
 
 
 class ReadTypeViewSet(viewsets.ModelViewSet):

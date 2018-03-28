@@ -175,19 +175,14 @@ def getCommCareData(request):
                 read_name = '%s form - %s' % (project, report_name)
             else:
                 read_name = project + ' cases'
-            read, read_created = Read.objects.get_or_create(
-                read_name=read_name, owner=user,defaults={
-                    'read_url': url,
-                    'type': ReadType.objects.get(read_type=provider),
-                    'description': ""
-                }
+            read = Read.objects.create(
+                read_name=read_name, owner=user, read_url=url,
+                type=ReadType.objects.get(read_type=provider),
+                description=""
             )
-            if read_created:
-                read.save()
-
             requested_silo_name = request.POST.get('new_table_name', None)
             silo, silo_created = Silo.objects.get_or_create(id=silo_id, defaults={"name": requested_silo_name, "public": False, "owner": request.user})
-            if silo_created or read_created:
+            if silo_created:
                 silo.reads.add(read)
             elif read not in silo.reads.all():
                 silo.reads.add(read)

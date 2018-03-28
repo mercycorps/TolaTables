@@ -186,7 +186,11 @@ var statusChart = new Chart(ctx, {
     data: data,
     options: options
 });
-document.getElementById('count-legend').innerHTML = statusChart.generateLegend();
+try{
+    document.getElementById('count-legend').innerHTML = statusChart.generateLegend();
+}
+catch(exception){
+}
 </script>
 
 <script id="read">
