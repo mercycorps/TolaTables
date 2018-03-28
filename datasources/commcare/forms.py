@@ -86,8 +86,7 @@ class CommCareProjectForm(forms.Form):
         commcare_form_name = cleaned_data.get('commcare_form_name')
         new_table_name = cleaned_data.get('new_table_name')
         silo = cleaned_data.get('silo')
-        print 'silothing', silo
-        print 'commrptnam, type', commcare_report_name, download_type
+
         if download_type == 'commcare_report' and commcare_report_name == 'default':
             self.add_error('commcare_report_name', "You must choose a report from the dropdown")
             raise forms.ValidationError("Your submission has errors")
@@ -108,7 +107,6 @@ class CommCareAuthForm(forms.Form):
     project = forms.CharField(max_length=60, required=True)
 
     def __init__(self, *args, **kwargs):
-        print 'kwargs in authform', kwargs
         self.helper = FormHelper()
         self.helper.add_input(Submit('submit', 'Submit'))
         super(CommCareAuthForm, self).__init__(*args, **kwargs)

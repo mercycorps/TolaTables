@@ -12,7 +12,6 @@ from collections import OrderedDict
 
 import pymongo
 from pymongo import MongoClient
-# from mongoengine.queryset.visitor import Q
 
 from bson.objectid import ObjectId
 from bson import CodecOptions, SON
@@ -54,9 +53,6 @@ from .models import Silo, Read, ReadType, ThirdPartyTokens, LabelValueStore, Tag
 from .forms import get_read_form, UploadForm, SiloForm, MongoEditForm, NewColumnForm, EditColumnForm, OnaLoginForm
 import requests, os
 
-#to delete soon
-# from .models import siloHideFilter
-
 logger = logging.getLogger("silo")
 db = getattr(MongoClient(settings.MONGODB_URI), settings.TOLATABLES_MONGODB_NAME)
 
@@ -80,7 +76,6 @@ def mergeTwoSilos(mapping_data, lsid, rsid, msid):
 
     merged_cols = []
 
-    #print("lsid:% rsid:%s msid:%s" % (lsid, rsid, msid))
     l_silo_data = LabelValueStore.objects(silo_id=lsid)
 
     r_silo_data = LabelValueStore.objects(silo_id=rsid)
@@ -1081,14 +1076,9 @@ def importDataFromRead(request, silo, read):
             url_parts = url.split('/')
             project = url_parts[4]
             report_id = url_parts[8]
-            print 'project and repot id', project, report_id
-            # https://www.commcarehq.org/a/mercycorpsnigeria/api/v0.5/configurablereportdata/bb8473fc3ef63eda59105315e91cb672?format=JSON
             data_count = getCommCareRecordCount(url, auth_header, project, report_id)
             helper_msgs = getCommCareDataHelper(url, auth_header, True, data_count, silo, read, 'commcare_report', report_id, update=True)
-            print 'report ret1 and 2 and overall: ', helper_msgs[0], helper_msgs[1], helper_msgs
-            #messages.add_message(request,ret[0],ret[1])
             #need to impliment if import failure
-
             return (None, 1, helper_msgs)
 
         else:
@@ -1179,8 +1169,6 @@ def newColumn(request,id):
             messages.info(request, 'Your column has been added', fail_silently=False)
         else:
             messages.error(request, 'There was a problem adding your column', fail_silently=False)
-            #print form.errors
-
 
     return render(request, "silo/new-column-form.html", {'silo':silo,'form': form})
 

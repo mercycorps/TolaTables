@@ -31,9 +31,8 @@ def getCommCareAuth(request):
     provider = 'CommCare'
 
     if request.method == 'POST':
-        #their exists a project and authorization so get the data
-        form = CommCareAuthForm(request.POST)
 
+        form = CommCareAuthForm(request.POST)
         if form.is_valid():
             # test validity of token by trying to grab some data
             ping_url = 'https://www.commcarehq.org/a/%s/api/v0.5/case/?limit=1' \
@@ -135,8 +134,6 @@ def getCommCareData(request):
             report_id = False
         try:
             commcare_form_id = request.POST['commcare_form_name']
-            # form_map = getCommCareReportIDs(project, auth_header)
-            # report_choices = [(k, v) for k,v in report_map.iteritems()]
         except KeyError:
             commcare_form_id = False
 
@@ -157,7 +154,6 @@ def getCommCareData(request):
             base_url = 'https://www.commcarehq.org/a/%s/api/v0.5/%s/'
 
             #set url and get size of dataset
-
             if download_type == 'commcare_report':
                 url = base_url % (project, 'configurablereportdata')
                 url = url + report_id + '/?format=JSON&limit=1'
@@ -204,6 +200,8 @@ def getCommCareData(request):
             cols = ret[2]
             return HttpResponseRedirect(reverse_lazy("siloDetail", kwargs={'silo_id' : silo.id}))
 
+        # Need to implement some sort of error catching code here.  CommCare
+        # sometimes returns html error messages to API calls
         # else:
         #     for m in messages.get_messages(request):
         #         print 'm e ss', m
