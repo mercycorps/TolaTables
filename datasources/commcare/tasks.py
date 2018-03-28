@@ -72,7 +72,7 @@ def requestCommCareData(
         data = json.loads(response.content)
     elif response.status_code == 429:
         if req_count > MAX_RETRIES:
-            raise OSError
+            raise OSError("Too many requests to server")
         else:
             time.sleep(1)
             req_count += 1
@@ -81,10 +81,10 @@ def requestCommCareData(
                 download_type, extra_data, update, req_count
             )
     elif response.status_code == 404:
-        raise OSError
+        raise OSError("Permission to CommCare server denied")
     else:
         if req_count > MAX_RETRIES:
-            raise OSError
+            raise OSError("Unspecified CommCare download error")
         else:
             time.sleep(1)
             req_count += 1
