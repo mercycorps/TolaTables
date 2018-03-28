@@ -74,7 +74,7 @@ def requestCommCareData(
         if req_count > MAX_RETRIES:
             raise OSError("Too many requests to server")
         else:
-            time.sleep(1)
+            time.sleep(2)
             req_count += 1
             return requestCommCareData(
                 url, offset, auth, auth_header, silo_id, read_id,
