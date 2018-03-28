@@ -72,13 +72,13 @@ def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, downl
     if download_type == 'commcare_report':
         record_limit = 50
     else:
-        record_limit = 3
+        record_limit = 100
 
     # replace the record limit
     base_url = url.replace('limit=1', 'limit=' + str(record_limit))
 
     data_raw = fetchCommCareData(base_url, auth, auth_header,\
-                    0, 10, record_limit, silo.id, read.id, \
+                    0, total_cases, record_limit, silo.id, read.id, \
                     download_type, extra_data, update)
     data_collects = data_raw.apply_async()
     data_retrieval = [v.get() for v in data_collects]
