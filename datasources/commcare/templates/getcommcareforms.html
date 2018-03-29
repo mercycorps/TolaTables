@@ -53,7 +53,7 @@
             //It's inside a hidden div so it won't appear on load.
             $("#div_id_commcare_report_name > div.controls").append(
                 '<div id="div_error_id_reports_not_found" class="has-error col-sm-8" style="padding-left:0px">'
-                    + '<span style="margin-top:0px" id="error_id_reports_not_found" class="help-block">'
+                    + '<span style="margin-top:7px" id="error_id_reports_not_found" class="help-block">'
                     +   '<strong>Reports not found.  Are you sure you picked the right project?</strong>'
                     + '</span>'
                 + '</div>'
@@ -62,19 +62,7 @@
 
             // If the form is returned with errors, make sure the appropriate
             // text input boxes are displayed.
-            var downloadType = $("input[type=radio][name=download_type]");
-            if ($("#id_download_type_1").attr("checked") == "checked") {
-                $("#div_id_commcare_report_name").show();
-                $("#div_id_commcare_form_name").hide();
-            }
-            // else if ($("#id_download_type_2").attr("checked") == "checked") {
-            //     $("#div_id_commcare_report_name").hide();
-            //     $("#div_id_commcare_form_name").show();
-            // }
-            else {
-                $("#div_id_commcare_report_name").hide();
-                $("#div_id_commcare_form_name").hide();
-            }
+            updateReportDropdown()
 
             if ($("#id_silo").val() == -1) {
                 $("#div_id_new_table_name").show();
@@ -83,6 +71,13 @@
                 $("#div_id_new_table_name").hide();
             }
 
+            // If the form is coming back with an error on choosing the silo,
+            // highlight the new silo input field as errored too.  The logic
+            // on whether to show or hide this table is done elsewhere.
+            if (document.getElementById("error_1_id_silo")){
+                $("#div_id_new_table_name").addClass("has-error")
+                $("label[for=id_new_table_name]").addClass("control-label")
+            }
 
             //Reveal the new table name input only if they have chosen to add a silo
             $("#id_silo").on("change", function() {
@@ -102,46 +97,60 @@
             // Doing it here rather than on radio button avoids doing an api
             // call on each radio select.  Need to make sure we're not
             // displaying the auth form.
-            if (document.getElementById("commcare-import-form")) {
-              base_url = '/commcare/report_names/?project=';
-              $('input[id="id_project"]').on("change", function() {
-                  url = base_url + $('#' + this.id).val();
-                  getReportNames(url);
-              });
-            }
+            base_url = '/commcare/report_names/?project=';
+
+            $('input[id="id_project"]').on("change", function() {
+                if (document.getElementById("commcare-import-form")) {
+                    url = base_url + $('#' + this.id).val();
+                    getReportNames(url);
+                }
+            });
 
             programMatch = window.location.href.match(/project=([^\&]+)/);
             if (programMatch) {
                 url = base_url + programMatch[1];
                 getReportNames(url);
             }
+
+            // Reveal the appropriate input field; depends on the download type
+            // selected by the user.
+            $("input[type=radio][name=download_type]").on("change", updateReportDropdown);
+
         });
 
-        // Reveal the appropriate input field; depends on the download type
-        // selected by the user.
-        $("input[type=radio][name=download_type]").on("change", function(){
-            if (this.value == 'commcare_report'){
+        var updateReportDropdown = function() {
+            if (document.getElementById('id_download_type_1').checked){
                 $("#div_id_commcare_report_name").show();
                 $("#div_id_commcare_form_name").hide();
                 $("#id_commcare_report_name").focus();
+
+                // More than one select option indicateds that fetech the list
+                // of reports was successful.  Show/hide appropriate inputs
+                // based on this success.
                 if ( $("#id_commcare_report_name option").length > 1 ) {
                     $("#div_error_id_reports_not_found").hide();
+                    $("#id_commcare_report_name").show();
                 }
                 else {
+                    $("#id_commcare_report_name").hide();
                     $("#div_error_id_reports_not_found").show();
+                    $("#error_1_id_commcare_report_name").hide();
                 }
             }
 
-            else if (this.value == 'commcare_form') {
-              $("#div_id_commcare_form_name").show();
-              $("#div_id_commcare_report_name").hide();
-              $("#id_commcare_form_name").focus();
-            }
+            // else if (document.getElementById('id_download_type_2').checked) {
+            //     $("#div_id_commcare_form_name").show();
+            //     $("#div_id_commcare_report_name").hide();
+            //     $("#id_commcare_form_name").focus();
+            // }
+
             else {
-              $("#div_id_commcare_report_name").hide();
-              $("#div_id_commcare_form_name").hide();
+                $("#div_id_commcare_report_name").hide();
+                $("#div_id_commcare_form_name").hide();
             }
-        });
+        };
+
+
 
         // Use a CommCare API to get the report names for the dropdown
         var getReportNames = function(url){
@@ -158,7 +167,7 @@
                         });
                         $('#id_commcare_report_name').html(options.join('\n'));
                     };
-                    $("input[type=radio][name=download_type]").change();
+                    updateReportDropdown();
                 }
             });
         };

@@ -119,7 +119,7 @@ def getCommCareData(request):
     if request.method == 'POST':
 
         silo_id = int(request.POST.get("silo", None))
-        if silo_id == -1:
+        if silo_id in [-1 ,0]:
             silo_id = None
 
         auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % \
