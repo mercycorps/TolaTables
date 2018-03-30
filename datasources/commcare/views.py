@@ -99,7 +99,7 @@ def getCommCareData(request):
 
     #get silo choices for the dropdown
     silos = Silo.objects.filter(owner=request.user)
-    silo_choices = [(0, ""), (-1, "Create new silo")]
+    silo_choices = [(0, ""), (-1, "Create a new Table")]
     for silo in silos:
         silo_choices.append((silo.pk, silo.name))
 
