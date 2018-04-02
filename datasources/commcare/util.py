@@ -91,3 +91,38 @@ def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, downl
     addColsToSilo(silo, columns)
     hideSiloColumns(silo, ["case_id"])
     return (messages.SUCCESS, "CommCare data imported successfully", columns)
+
+from silo.models import ThirdPartyTokens
+class CommCareImportConfig(object):
+    def __init__(self, *args, **kwargs):
+        self.download_type = kwargs.get('download_type', None)
+        self.url = kwargs.get('url', None)
+        self.silo = kwargs.get('silo', None)
+        self.read = kwargs.get('read', None)
+        self.project = kwargs.get('project', None)
+        self.report_name = kwargs.get('report_name', None)
+        self.tables_user = kwargs.get('user', None)
+        self.tpt_username = kwargs.get('tpt_username', None) #ThirdPartyTokens
+        self.token = kwargs.get('token', None) # dict includes username, token
+        self.auth_header = kwargs.get('auth_header', None)
+
+
+    def set_token(self):
+        print 'in set token', self.__str__()
+        self.token = ThirdPartyTokens.objects.get(
+            username=self.tpt_username, name="CommCare"
+        ).token
+
+    def set_auth_header(self):
+        if not self.token:
+            self.set_token()
+        self.auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % \
+            {'u' : self.tpt_username, 'a' : self.token}}
+
+    def parseURL(url):
+        url_parts = url.split('/')
+        print url_parts[3], url_parts[6]
+
+    def __str__(self):
+        return "\n".join("%s: %s" % (k, v) for k, v in vars(self).iteritems())
+

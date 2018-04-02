@@ -78,7 +78,7 @@ def getCommCareAuth(request):
         except ThirdPartyTokens.MultipleObjectsReturned:
             messages.error(request,
                 "There was a problem with your login.  \
-                Please re-enter your information.")
+                Please re-enter your login information.")
             form = CommCareAuthForm()
         except ThirdPartyTokens.DoesNotExist:
             form = CommCareAuthForm()
