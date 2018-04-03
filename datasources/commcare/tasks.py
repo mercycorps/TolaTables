@@ -17,9 +17,7 @@ import time
 
 
 @shared_task(trail=True)
-def fetchCommCareData(
-        url, auth, auth_header, start, end, step,
-        silo_id, read_id, download_type, extra_data, update=False):
+def fetchCommCareData(conf, url, start, step):
     """
     This function will call the appointed functions to fetch the commcare data
 
@@ -35,17 +33,20 @@ def fetchCommCareData(
     extra_data -- the form or report that is to be downloaded, may be empty
     update -- if true use the update functionality
     """
-    return group(requestCommCareData.s(
-            url, offset, auth, auth_header, silo_id, read_id, download_type,
-            extra_data, update, 0) for offset in xrange(start, end, step)
-        )
+    # return group(requestCommCareData.s(
+    #     conf, url, offset, 0) for offset in xrange(
+    #         start, conf['record_count'], step
+    #     )
+    # )
 
+    return group(requestCommCareData.s(
+        conf, url, offset, 0) for offset in xrange(
+            start, 6, 2
+        )
+    )
 
 @shared_task(trail=True)
-def requestCommCareData(
-            base_url, offset, auth, auth_header, silo_id, read_id,
-            download_type, extra_data, update, req_count
-        ):
+def requestCommCareData(conf, base_url, offset, req_count):
     """
     This function will retrieve the appointed page of commcare data and
     return the data in an array.
@@ -64,8 +65,8 @@ def requestCommCareData(
 
     MAX_RETRIES = 4
     url = base_url + "&offset=" + str(offset)
-    if auth_header:
-        response = requests.get(url, headers=auth)
+    if conf['use_token']:
+        response = requests.get(url, headers=conf['auth_header'])
     else:
         response = requests.get(url, auth=HTTPDigestAuth(auth['u'], auth['p']))
     if response.status_code == 200:
@@ -76,10 +77,7 @@ def requestCommCareData(
         else:
             time.sleep(2)
             req_count += 1
-            return requestCommCareData(
-                url, offset, auth, auth_header, silo_id, read_id,
-                download_type, extra_data, update, req_count
-            )
+            return requestCommCareData(conf, base_url, offset, req_count)
     elif response.status_code == 404:
         raise OSError("Permission to CommCare server denied")
     else:
@@ -88,27 +86,19 @@ def requestCommCareData(
         else:
             time.sleep(1)
             req_count += 1
-            return requestCommCareData(
-                url, offset, auth, auth_header, silo_id, read_id,
-                download_type, extra_data, update, req_count
-            )
+            return requestCommCareData(conf, base_url, offset, req_count)
 
     # Now get the properties of each dataset.
-    if download_type == 'commcare_report':
-        return parseCommCareReportData(
-            data, silo_id, read_id, update, download_type)
-    elif download_type == 'commcare_form':
-        return parseCommCareFormData(
-            data, silo_id, read_id, update, extra_data, download_type
-        )
+    if conf['download_type'] == 'commcare_report':
+        return parseCommCareReportData(conf, data)
+    elif conf['download_type'] == 'commcare_form':
+        return parseCommCareFormData(conf, data)
     else:
-        return parseCommCareCaseData(
-            data['objects'], silo_id, read_id, update, download_type
-        )
+        return parseCommCareCaseData(conf, data['objects'])
 
 
 @shared_task()
-def parseCommCareCaseData(data, silo_id, read_id, update, download_type):
+def parseCommCareCaseData(conf, data):
     data_properties = []
     data_columns = set()
     for entry in data:
@@ -120,14 +110,12 @@ def parseCommCareCaseData(data, silo_id, read_id, update, download_type):
             pass
         data_properties[-1]["case_id"] = entry['case_id']
         data_columns.update(entry['properties'].keys())
-    storeCommCareData(data_properties, silo_id, read_id, update, download_type)
+    storeCommCareData(conf, data_properties)
     return list(data_columns)
 
 
 @shared_task()
-def parseCommCareFormData(
-            data, silo_id, read_id, update, form_id, download_type
-        ):
+def parseCommCareFormData(conf, data):
     exclude_tags = ['case', 'meta']
     data_properties = []
     data_columns = set()
@@ -139,12 +127,12 @@ def parseCommCareFormData(
             filtered_data[form_key] = row['form'][form_key]
         data_properties.append(filtered_data)
         data_columns.update(filtered_data.keys())
-    storeCommCareData(data_properties, silo_id, read_id, update, download_type)
+    storeCommCareData(conf, data_properties)
     return list(data_columns)
 
 
 @shared_task()
-def parseCommCareReportData(data, silo_id, read_id, update, download_type):
+def parseCommCareReportData(conf, data):
     data_properties = []
     data_columns = set()
     column_mapper = {}
@@ -156,16 +144,16 @@ def parseCommCareReportData(data, silo_id, read_id, update, download_type):
         data_properties.append(renamed_row)
 
     data_columns = column_mapper.values()
-    storeCommCareData(data_properties, silo_id, read_id, update, download_type)
+    storeCommCareData(conf, data_properties)
     return data_columns
 
 
 @shared_task()
-def storeCommCareData(data, silo_id, read_id, update, download_type):
+def storeCommCareData(conf, data):
 
     data_refined = []
     try:
-        fieldToType = getColToTypeDict(Silo.objects.get(pk=silo_id))
+        fieldToType = getColToTypeDict(Silo.objects.get(pk=conf['silo_id']))
     except Silo.DoesNotExist:
         fieldToType = {}
     for row in data:
@@ -191,26 +179,24 @@ def storeCommCareData(data, silo_id, read_id, update, download_type):
     db = getattr(
         MongoClient(settings.MONGODB_URI), settings.TOLATABLES_MONGODB_NAME
     )
-    if update:
-        if download_type == 'case':
+    if conf['update']:
+        if conf['download_type'] == 'case':
             for row in data_refined:
                 row['edit_date'] = timezone.now()
                 db.label_value_store.update(
-                    {'silo_id': silo_id, 'case_id': row['case_id']},
+                    {'silo_id': conf['silo_id'], 'case_id': row['case_id']},
                     {"$set": row},
                     upsert=True
                 )
-        elif download_type == 'commcare_report':
-            silo = Silo.objects.get(id=silo_id)
-            read = Read.objects.get(id=read_id)
-            db.label_value_store.delete_many({'silo_id': silo.pk})
-            saveDataToSilo(silo, data_refined, read)
+        elif conf['download_type'] == 'commcare_report':
+            db.label_value_store.delete_many({'silo_id': conf['silo_id']})
+            saveDataToSilo(conf['silo_id'], data_refined, conf['read_id'])
     else:
 
         for row in data_refined:
             row["create_date"] = timezone.now()
-            row["silo_id"] = silo_id
-            row["read_id"] = read_id
+            row["silo_id"] = conf['silo_id']
+            row["read_id"] = conf['read_id']
         db.label_value_store.insert(data_refined)
 
 

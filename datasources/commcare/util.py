@@ -8,7 +8,7 @@ from celery import group
 
 from .tasks import fetchCommCareData, requestCommCareData, storeCommCareData
 
-from silo.models import LabelValueStore
+from silo.models import LabelValueStore, Silo
 from tola.util import saveDataToSilo, addColsToSilo, hideSiloColumns
 from pymongo import MongoClient
 from django.conf import settings
@@ -56,7 +56,7 @@ def getCommCareRecordCount(base_url, auth_header, project=None, extra_data=None)
 
 
 
-def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, download_type, extra_data, update=False):
+def getCommCareDataHelper(conf):
     """
     Use fetch and request CommCareData to store all of the case data
 
@@ -69,17 +69,14 @@ def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, downl
     """
 
     # CommCare has a max limit of 50 for report downloads
-    if download_type == 'commcare_report':
+    if conf.download_type == 'commcare_report':
         record_limit = 50
     else:
         record_limit = 100
 
     # replace the record limit
-    base_url = url.replace('limit=1', 'limit=' + str(record_limit))
-
-    data_raw = fetchCommCareData(base_url, auth, auth_header,\
-                    0, total_cases, record_limit, silo.id, read.id, \
-                    download_type, extra_data, update)
+    base_url = conf.url.replace('limit=1', 'limit=' + str(record_limit))
+    data_raw = fetchCommCareData(conf.to_dict(), base_url, 0, record_limit)
     data_collects = data_raw.apply_async()
     data_retrieval = [v.get() for v in data_collects]
     columns = set()
@@ -88,6 +85,7 @@ def getCommCareDataHelper(url, auth, auth_header, total_cases, silo, read, downl
 
     #add new columns to the list of current columns this is slower because
     #order has to be maintained (2n instead of n)
+    silo = Silo.objects.get(pk=conf.silo_id)
     addColsToSilo(silo, columns)
     hideSiloColumns(silo, ["case_id"])
     return (messages.SUCCESS, "CommCare data imported successfully", columns)
@@ -96,22 +94,27 @@ from silo.models import ThirdPartyTokens
 class CommCareImportConfig(object):
     def __init__(self, *args, **kwargs):
         self.download_type = kwargs.get('download_type', None)
-        self.url = kwargs.get('url', None)
-        self.silo = kwargs.get('silo', None)
-        self.read = kwargs.get('read', None)
+        self.update = kwargs.get('update', False)
+        self.base_url = kwargs.get('url', None)
+        self.silo_id = kwargs.get('silo', None)
+        self.read_id = kwargs.get('read', None)
         self.project = kwargs.get('project', None)
-        self.report_name = kwargs.get('report_name', None)
-        self.tables_user = kwargs.get('user', None)
+        self.report_id = kwargs.get('report_id', None)
+        self.form_id = kwargs.get('form_id', None)
+        self.record_count = kwargs.get('record_count', None)
+        self.tables_user_id = kwargs.get('user', None)
+        self.use_token = kwargs.get('user', True)
         self.tpt_username = kwargs.get('tpt_username', None) #ThirdPartyTokens
         self.token = kwargs.get('token', None) # dict includes username, token
         self.auth_header = kwargs.get('auth_header', None)
 
 
     def set_token(self):
-        print 'in set token', self.__str__()
-        self.token = ThirdPartyTokens.objects.get(
-            username=self.tpt_username, name="CommCare"
-        ).token
+        token_obj = ThirdPartyTokens.objects.get(
+            user_id=self.tables_user_id, name="CommCare"
+        )
+        self.token = token_obj.token
+        self.tpt_username = token_obj.username
 
     def set_auth_header(self):
         if not self.token:
@@ -119,9 +122,8 @@ class CommCareImportConfig(object):
         self.auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % \
             {'u' : self.tpt_username, 'a' : self.token}}
 
-    def parseURL(url):
-        url_parts = url.split('/')
-        print url_parts[3], url_parts[6]
+    def to_dict(self):
+        return dict((k, v) for k, v in vars(self).iteritems())
 
     def __str__(self):
         return "\n".join("%s: %s" % (k, v) for k, v in vars(self).iteritems())
