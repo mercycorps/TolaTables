@@ -30,7 +30,6 @@ def get_projects(user_id):
 # get a list of reports available to the user
 def get_commcare_report_ids(conf):
     url = 'https://www.commcarehq.org/a/%s/api/v0.5/simplereportconfiguration/?format=JSON' % conf.project
-    print 'reportids conf', conf
     response = requests.get(url, headers=conf.auth_header)
     response_data = json.loads(response.content)
     report_ids = {}
@@ -44,18 +43,14 @@ def get_commcare_report_ids(conf):
 # Rectrieve record counts for commcare download.
 def get_commcare_record_count(conf):
     # If 'configurablereportdata' is in the url, reports are being downloaded
-    print "getcomreacordcount conf", conf
     if 'configurablereportdata' in conf.base_url:
-        print 'in config report data', conf
         url = 'https://www.commcarehq.org/a/%s/api/v0.5/configurablereportdata/%s/?format=JSON&limit=1'
         url = url % (conf.project, conf.report_id)
         response = requests.get(url, headers=conf.auth_header)
-        print 'response content for report', response.content
         response_data = json.loads(response.content)
         return response_data['total_records']
     # Counts for forms and cases can be retrieved in the same way
     else:
-        print 'not in config report data', conf
         response = requests.get(conf.base_url, headers=conf.auth_header)
         response_data = json.loads(response.content)
         return response_data['meta']['total_count']
@@ -116,7 +111,6 @@ class CommCareImportConfig(object):
 
 
     def set_token(self):
-        print 'tuid', self.tables_user_id
         token_obj = ThirdPartyTokens.objects.get(
             user_id=self.tables_user_id, name="CommCare"
         )
@@ -124,7 +118,6 @@ class CommCareImportConfig(object):
         self.tpt_username = token_obj.username
 
     def set_auth_header(self):
-        print 'inauthheader userid', self.tables_user_id
         if not self.token:
             self.set_token()
         self.auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % \

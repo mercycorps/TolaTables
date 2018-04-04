@@ -58,7 +58,6 @@ def requestCommCareData(conf, base_url, offset, req_count):
 
     MAX_RETRIES = 4
     url = base_url + "&offset=" + str(offset)
-    print "processing url", url
     if conf['use_token']:
         response = requests.get(url, headers=conf['auth_header'])
     else:
@@ -151,7 +150,6 @@ def storeCommCareData(conf, data):
     except Silo.DoesNotExist:
         fieldToType = {}
     for row in data:
-        print 'rowequals', row
         for column in row:
             if fieldToType.get(column, 'string') == 'int':
                 try:

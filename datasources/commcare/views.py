@@ -245,11 +245,9 @@ def commcareLogout(request):
 
 @login_required
 def get_commcare_report_names(request):
-    print 'ruser', request.user
     conf = CommCareImportConfig(
         project=request.GET['project'], tables_user_id=request.user.id
     )
-    print 'before set conf', conf
     conf.set_auth_header()
     reports = get_commcare_report_ids(conf)
     return HttpResponse(json.dumps(reports))

@@ -9,7 +9,7 @@ from silo.models import LabelValueStore, Read, Silo, ThirdPartyTokens, ReadType
 from tola.util import getNewestDataDate, cleanKey, addColsToSilo
 
 from commcare.tasks import fetchCommCareData
-from commcare.util import get_commcare_record_count
+from commcare.util import get_commcare_record_count, CommCareImportConfig
 
 class Command(BaseCommand):
     """
@@ -32,33 +32,36 @@ class Command(BaseCommand):
         for silo in silos:
             reads = silo.reads.filter(type=read_type.pk)
             for read in reads:
-                commcare_token = None
+                conf = CommCareImportConfig(
+                    silo_id=silo.id, read_id=read.id,
+                    tables_user_id=silo.owner.pk, base_url=read.read_url,
+                    update=True
+                )
+
                 try:
-                    commcare_token = ThirdPartyTokens.objects.get(user=silo.owner.pk, name="CommCare")
+                    conf.set_auth_header()
                 except Exception as e:
                     self.stdout.write('No commcare api key for silo %s, read "%s"' % (silo.pk, read.pk))
                     continue
-                url = read.read_url
-                auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
 
                 # get/build metadata based on download_type
-                if 'case' in url:
+                if 'case' in conf.base_url:
                     last_data_retrieved = str(getNewestDataDate(silo.id))[:10]
-                    url = url + "&date_modified_start=" + last_data_retrieved
-                    download_type = 'case'
-                    record_count = get_commcare_record_count(url, auth_header)
-                elif 'configurablereportdata' in url:
-                    download_type = 'commcare_report'
-                    url_parts = url.split('/')
-                    project = url_parts[4]
-                    report_id = url_parts[8]
-                    record_count = get_commcare_record_count(url, auth_header, project, report_id)
+                    conf.base_url += "&date_modified_start=" + last_data_retrieved
+                    conf.download_type = 'case'
+                    conf.record_count = get_commcare_record_count(conf)
+                elif 'configurablereportdata' in conf.base_url:
+                    conf.download_type = 'commcare_report'
+                    url_parts = conf.base_url.split('/')
+                    conf.project = url_parts[4]
+                    conf.report_id = url_parts[8]
+                    conf.record_count = get_commcare_record_count(conf)
 
-                if record_count == 0:
+                if conf.record_count == 0:
                     self.stdout.write('No new commcare data for READ_ID, "%s"' % read.pk)
                     continue
 
-                response = requests.get(url, headers=auth_header)
+                response = requests.get(conf.base_url, headers=conf.auth_header)
                 if response.status_code == 401:
                     commcare_token.delete()
                     self.stdout.write('Incorrect commcare api key for silo %s, read %s' % (silo.pk, read.pk))
@@ -66,9 +69,11 @@ class Command(BaseCommand):
                     self.stdout.write('Failure retrieving commcare data for silo %s, read %s' % (silo.pk, read.pk))
 
                 #Now call the update data function in commcare tasks
+                conf.base_url = read.read_url
+                conf.use_token = True
+
                 data_raw = fetchCommCareData(
-                    url, auth_header, True, 0, record_count,
-                    50, silo.id, read.id, download_type, None, True
+                    conf.to_dict(), conf.base_url, 0, 50
                 )
                 data_collects = data_raw.apply_async()
                 new_colnames = set()
