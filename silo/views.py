@@ -21,7 +21,8 @@ from django.core.urlresolvers import reverse, reverse_lazy
 from django.http import HttpResponseForbidden,\
     HttpResponseRedirect, HttpResponseNotFound, HttpResponseBadRequest,\
     HttpResponse, HttpResponseRedirect, JsonResponse
-from django.shortcuts import render_to_response, get_object_or_404, redirect, render
+from django.shortcuts import render_to_response, get_object_or_404, redirect, \
+    render
 from django.utils import timezone
 from django.utils.encoding import smart_str, smart_text
 from django.utils.text import Truncator
@@ -41,20 +42,26 @@ from silo.custom_csv_dict_reader import CustomDictReader
 from .models import GoogleCredentialsModel
 from gviews_v4 import import_from_gsheet_helper
 from tola.util import importJSON, saveDataToSilo, getSiloColumnNames,\
-                        parseMathInstruction, calculateFormulaColumn, makeQueryForHiddenRow,\
-                        getNewestDataDate, addColsToSilo, deleteSiloColumns, hideSiloColumns, \
-                        getCompleteSiloColumnNames, setSiloColumnType, getColToTypeDict
+    parseMathInstruction, calculateFormulaColumn, makeQueryForHiddenRow,\
+    getNewestDataDate, addColsToSilo, deleteSiloColumns, hideSiloColumns, \
+    getCompleteSiloColumnNames, setSiloColumnType, getColToTypeDict
 
 
 from commcare.tasks import fetchCommCareData
-from commcare.util import getCommCareRecordCount, getCommCareDataHelper
+from commcare.util import get_commcare_record_count, getCommCareDataHelper, \
+    CommCareImportConfig
 
-from .models import Silo, Read, ReadType, ThirdPartyTokens, LabelValueStore, Tag, UniqueFields, MergedSilosFieldMapping, TolaSites, PIIColumn, DeletedSilos, FormulaColumn
-from .forms import get_read_form, UploadForm, SiloForm, MongoEditForm, NewColumnForm, EditColumnForm, OnaLoginForm
+from .models import Silo, Read, ReadType, ThirdPartyTokens, LabelValueStore, \
+    Tag, UniqueFields, MergedSilosFieldMapping, TolaSites, PIIColumn, \
+    DeletedSilos, FormulaColumn
+from .forms import get_read_form, UploadForm, SiloForm, MongoEditForm, \
+    NewColumnForm, EditColumnForm, OnaLoginForm
 import requests, os
 
 logger = logging.getLogger("silo")
-db = getattr(MongoClient(settings.MONGODB_URI), settings.TOLATABLES_MONGODB_NAME)
+db = getattr(
+    MongoClient(settings.MONGODB_URI), settings.TOLATABLES_MONGODB_NAME
+)
 
 # To preserve fields order when reading BSON from MONGO
 opts = CodecOptions(document_class=SON)
@@ -999,13 +1006,19 @@ def updateSiloData(request, pk):
             # Save new records and delete old ones unless it's CommCare. In that
             # case, those functions are handled within the celery tasks.
             if read.type.read_type != 'CommCare':
+
                 if  unique_field_exist == False:
-                    lvs = LabelValueStore.objects(silo_id=silo.pk,__raw__={"read_id" : { "$exists" : "true", "$in" : sources_to_delete }})
+                    lvs = LabelValueStore.objects(
+                        silo_id=silo.pk,
+                        __raw__={"read_id" : {
+                            "$exists" : "true", "$in" : sources_to_delete
+                        }}
+                    )
                     lvs.delete()
 
                 for x in range(0,len(data[0])):
                     for entry in data[1][x]:
-                        saveDataToSilo(silo,entry,data[0][x],request.user)
+                        saveDataToSilo(silo, entry, data[0][x], request.user)
 
             for read in reads:
                 if read.type.read_type == "GSheet Import":
@@ -1062,29 +1075,34 @@ def importDataFromRead(request, silo, read):
         #as the google sheet import already performs the update functionality so when its time to input the data again google spreadsheet update will be called
         return (None,2,None)
     elif read.type.read_type == "CommCare":
-        commcare_token = None
+        conf = CommCareImportConfig(
+            tables_user_id=request.user.id, silo_id=silo.id,
+            read_id=read.id, update=True
+        )
+
         try:
-            commcare_token = ThirdPartyTokens.objects.get(user=silo.owner.pk, name="CommCare")
+            conf.set_auth_header()
         except Exception as e:
             return (None,0,(messages.ERROR, "You need to login to commcare using an API Key to access this functionality"))
-        auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
 
         # how to fetch depends on whether reports or cases are being downloaded
         # url, auth_header, True, data_count, silo, read, request.POST['commcare_report_name']
         if 'configurablereportdata' in read.read_url:
-            url = read.read_url
-            url_parts = url.split('/')
-            project = url_parts[4]
-            report_id = url_parts[8]
-            data_count = getCommCareRecordCount(url, auth_header, project, report_id)
-            helper_msgs = getCommCareDataHelper(url, auth_header, True, data_count, silo, read, 'commcare_report', report_id, update=True)
+            conf.base_url = read.read_url
+            url_parts = read.read_url.split('/')
+            conf.project = url_parts[4]
+            conf.report_id = url_parts[8]
+            conf.record_count = get_commcare_record_count(conf)
+            conf.download_type = 'commcare_report'
+            helper_msgs = getCommCareDataHelper(conf)
             #need to impliment if import failure
             return (None, 1, helper_msgs)
 
         else:
+            conf.download_type = 'cases'
             last_data_retrieved = str(getNewestDataDate(silo.id))[:10]
             url = "/".join(read.read_url.split("/")[:8]) + "?date_modified_start=" + last_data_retrieved + "&" + "limit="
-            response = requests.get(url+ str(1), headers=auth_header)
+            response = requests.get(url+ str(1), headers=conf.auth_header)
             if response.status_code == 401:
                 commcare_token.delete()
                 return (None,0,(messages.ERROR, "Your Commcare usernmane or API Key is incorrect"))
@@ -1093,10 +1111,11 @@ def importDataFromRead(request, silo, read):
             metadata = json.loads(response.content)
             if metadata['meta']['total_count'] == 0:
                 return (None, 2, (messages.SUCCESS, "Your commcare data was already up to date"))
+            else:
+                conf.record_count = metadata['meta']['total_count']
             #Now call the update data function in commcare tasks
-            auth = {'Authorization': 'ApiKey %(u)s:%(a)s' % {'u' : commcare_token.username, 'a' : commcare_token.token}}
             url += "50"
-            data_raw = fetchCommCareData(url, auth, True, 0, metadata['meta']['total_count'], 50, silo.id, read.id, 'cases', None, True)
+            data_raw = fetchCommCareData(conf.to_dict(), url, 0, 50)
             data_collects = data_raw.apply_async()
             data_retrieval = [v.get() for v in data_collects]
             columns = set()

@@ -375,15 +375,15 @@ class getCommCareProjectsTest(TestCase):
         self.read_type = ReadType.objects.create(read_type="CommCare")
 
     def test_onaParserOneLayer(self):
-        self.assertEqual(getProjects(self.user.id), [])
+        self.assertEqual(get_projects(self.user.id), [])
         self.read = Read.objects.create(read_name="test_read1", owner = self.user, type=self.read_type, read_url="https://www.commcarehq.org/a/a/")
-        self.assertEqual(getProjects(self.user.id), ['a'])
+        self.assertEqual(get_projects(self.user.id), ['a'])
         self.read = Read.objects.create(read_name="test_read2", owner = self.user, type=self.read_type, read_url="https://www.commcarehq.org/a/b/")
-        self.assertEqual(getProjects(self.user.id), ['a','b'])
+        self.assertEqual(get_projects(self.user.id), ['a','b'])
         self.read = Read.objects.create(read_name="test_read3", owner = self.user, type=self.read_type, read_url="https://www.commcarehq.org/a/b/")
-        self.assertEqual(getProjects(self.user.id), ['a','b'])
+        self.assertEqual(get_projects(self.user.id), ['a','b'])
         self.read = Read.objects.create(read_name="test_read4", owner = self.user2, type=self.read_type, read_url="https://www.commcarehq.org/a/c/")
-        self.assertEqual(getProjects(self.user.id), ['a','b'])
+        self.assertEqual(get_projects(self.user.id), ['a','b'])
 
 class parseCommCareDataTest(TestCase):
     def test_commcaredataparser(self):
@@ -427,7 +427,8 @@ class parseCommCareDataTest(TestCase):
                 }
             },
         ]
-        parseCommCareData(data, -87, -97, False)
+        ccic = CommCareImportConfig(silo_id=-87, read_id=-97, update=False)
+        parseCommCareCaseData(ccic.to_dict(), data)
         try:
             try:
                 lvs = LabelValueStore.objects.get(a=1, b=2, c=3, case_id=1, read_id=-97, silo_id = -87)
@@ -477,7 +478,8 @@ class parseCommCareDataTest(TestCase):
                 }
             }
         ]
-        parseCommCareData(data, -87, -97, True)
+        ccic.update = True
+        parseCommCareData(ccic.to_dict(), data)
         try:
             try:
                 lvs = LabelValueStore.objects.get(a=2, b=2, c=3, d=4, case_id=1, read_id=-97, silo_id = -87)

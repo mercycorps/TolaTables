@@ -19,7 +19,7 @@ db = client.get_database(settings.TOLATABLES_MONGODB_NAME)
 
 #this gets a list of projects that users have used in the past to import data from commcare
 #used in commcare/forms.py
-def getProjects(user_id):
+def get_projects(user_id):
     reads = Read.objects.filter(type__read_type='CommCare', owner_id=user_id)
     projects = []
     for read in reads:
@@ -28,9 +28,10 @@ def getProjects(user_id):
 
 
 # get a list of reports available to the user
-def getCommCareReportIDs(project_name, header):
-    url = 'https://www.commcarehq.org/a/%s/api/v0.5/simplereportconfiguration/?format=JSON' % project_name
-    response = requests.get(url, headers=header)
+def get_commcare_report_ids(conf):
+    url = 'https://www.commcarehq.org/a/%s/api/v0.5/simplereportconfiguration/?format=JSON' % conf.project
+    print 'reportids conf', conf
+    response = requests.get(url, headers=conf.auth_header)
     response_data = json.loads(response.content)
     report_ids = {}
     try:
@@ -41,16 +42,21 @@ def getCommCareReportIDs(project_name, header):
     return report_ids
 
 # Rectrieve record counts for commcare download.
-def getCommCareRecordCount(base_url, auth_header, project=None, extra_data=None):
+def get_commcare_record_count(conf):
     # If 'configurablereportdata' is in the url, reports are being downloaded
-    if 'configurablereportdata' in base_url:
-        url = 'https://www.commcarehq.org/a/%s/api/v0.5/configurablereportdata/%s/?format=JSON&limit=1' % (project, extra_data)
-        response = requests.get(url, headers=auth_header)
+    print "getcomreacordcount conf", conf
+    if 'configurablereportdata' in conf.base_url:
+        print 'in config report data', conf
+        url = 'https://www.commcarehq.org/a/%s/api/v0.5/configurablereportdata/%s/?format=JSON&limit=1'
+        url = url % (conf.project, conf.report_id)
+        response = requests.get(url, headers=conf.auth_header)
+        print 'response content for report', response.content
         response_data = json.loads(response.content)
         return response_data['total_records']
     # Counts for forms and cases can be retrieved in the same way
     else:
-        response = requests.get(base_url, headers=auth_header)
+        print 'not in config report data', conf
+        response = requests.get(conf.base_url, headers=conf.auth_header)
         response_data = json.loads(response.content)
         return response_data['meta']['total_count']
 
@@ -75,7 +81,7 @@ def getCommCareDataHelper(conf):
         record_limit = 100
 
     # replace the record limit
-    base_url = conf.url.replace('limit=1', 'limit=' + str(record_limit))
+    base_url = conf.base_url.replace('limit=1', 'limit=' + str(record_limit))
     data_raw = fetchCommCareData(conf.to_dict(), base_url, 0, record_limit)
     data_collects = data_raw.apply_async()
     data_retrieval = [v.get() for v in data_collects]
@@ -95,21 +101,22 @@ class CommCareImportConfig(object):
     def __init__(self, *args, **kwargs):
         self.download_type = kwargs.get('download_type', None)
         self.update = kwargs.get('update', False)
-        self.base_url = kwargs.get('url', None)
-        self.silo_id = kwargs.get('silo', None)
-        self.read_id = kwargs.get('read', None)
+        self.base_url = kwargs.get('base_url', None)
+        self.silo_id = kwargs.get('silo_id', None)
+        self.read_id = kwargs.get('read_id', None)
         self.project = kwargs.get('project', None)
         self.report_id = kwargs.get('report_id', None)
         self.form_id = kwargs.get('form_id', None)
         self.record_count = kwargs.get('record_count', None)
-        self.tables_user_id = kwargs.get('user', None)
-        self.use_token = kwargs.get('user', True)
+        self.tables_user_id = kwargs.get('tables_user_id', None)
+        self.use_token = kwargs.get('use_token', True)
         self.tpt_username = kwargs.get('tpt_username', None) #ThirdPartyTokens
         self.token = kwargs.get('token', None) # dict includes username, token
         self.auth_header = kwargs.get('auth_header', None)
 
 
     def set_token(self):
+        print 'tuid', self.tables_user_id
         token_obj = ThirdPartyTokens.objects.get(
             user_id=self.tables_user_id, name="CommCare"
         )
@@ -117,6 +124,7 @@ class CommCareImportConfig(object):
         self.tpt_username = token_obj.username
 
     def set_auth_header(self):
+        print 'inauthheader userid', self.tables_user_id
         if not self.token:
             self.set_token()
         self.auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % \

@@ -21,17 +21,10 @@ def fetchCommCareData(conf, url, start, step):
     """
     This function will call the appointed functions to fetch the commcare data
 
+    conf -- a CommCareImportConfig dict
     url -- the base url
-    auth -- the authorization required
-    auth_header -- True = use Header, False = use Digest authorization
     start -- What record to start at
-    end -- what record to end at
     step -- # of records to get in one request
-    silo_id -- the id of the silo being modified, may be empy
-    read_id -- the id of the read being modified, may be empy
-    download_type -- the type of download (commcare_form_name, etc...)
-    extra_data -- the form or report that is to be downloaded, may be empty
-    update -- if true use the update functionality
     """
     # return group(requestCommCareData.s(
     #     conf, url, offset, 0) for offset in xrange(
@@ -41,7 +34,7 @@ def fetchCommCareData(conf, url, start, step):
 
     return group(requestCommCareData.s(
         conf, url, offset, 0) for offset in xrange(
-            start, 6, 2
+            start, 100, step
         )
     )
 
@@ -65,6 +58,7 @@ def requestCommCareData(conf, base_url, offset, req_count):
 
     MAX_RETRIES = 4
     url = base_url + "&offset=" + str(offset)
+    print "processing url", url
     if conf['use_token']:
         response = requests.get(url, headers=conf['auth_header'])
     else:
@@ -157,6 +151,7 @@ def storeCommCareData(conf, data):
     except Silo.DoesNotExist:
         fieldToType = {}
     for row in data:
+        print 'rowequals', row
         for column in row:
             if fieldToType.get(column, 'string') == 'int':
                 try:
@@ -189,8 +184,10 @@ def storeCommCareData(conf, data):
                     upsert=True
                 )
         elif conf['download_type'] == 'commcare_report':
+            silo = Silo.objects.get(pk=conf['silo_id'])
+            read = Read.objects.get(pk=conf['read_id'])
             db.label_value_store.delete_many({'silo_id': conf['silo_id']})
-            saveDataToSilo(conf['silo_id'], data_refined, conf['read_id'])
+            saveDataToSilo(silo, data_refined, read)
     else:
 
         for row in data_refined:

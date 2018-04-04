@@ -18,8 +18,8 @@ from silo.models import Silo, Read, ReadType, ThirdPartyTokens
 from tola.util import saveDataToSilo, getSiloColumnNames
 from commcare.forms import CommCareAuthForm, CommCareProjectForm
 from commcare.tasks import fetchCommCareData, requestCommCareData
-from commcare.util import getCommCareDataHelper, getCommCareReportIDs, \
-    getCommCareRecordCount, CommCareImportConfig
+from commcare.util import getCommCareDataHelper, get_commcare_report_ids, \
+    get_commcare_record_count, CommCareImportConfig
 
 @login_required
 def getCommCareAuth(request):
@@ -112,7 +112,7 @@ def getCommCareData(request):
         conf.use_token = True
     except (ThirdPartyTokens.MultipleObjectsReturned,
             ThirdPartyTokens.DoesNotExist
-    )
+    ):
         return redirect('getCommCareAuth')
 
 
@@ -127,9 +127,7 @@ def getCommCareData(request):
         report_choices = [('default', 'Select a Report')]
         try:
             conf.report_id = request.POST['commcare_report_name']
-            report_map = getCommCareReportIDs(
-                conf.project, conf.auth_header
-            )
+            report_map = get_commcare_report_ids(conf)
             report_choices.extend([(k, v) for k,v in report_map.iteritems()])
         except KeyError:
             conf.report_id = False
@@ -156,26 +154,19 @@ def getCommCareData(request):
             base_url = 'https://www.commcarehq.org/a/%s/api/v0.5/%s/'
 
             # Set url and get size of dataset.  KeyError will be thrown by
-            # getCommCareRecordCount when CommCare API isn't working
+            # get_commcare_record_count when CommCare API isn't working
             try:
                 if conf.download_type == 'commcare_report':
-                    conf.url = base_url % (conf.project, 'configurablereportdata')
-                    conf.url += conf.report_id + '/?format=JSON&limit=1'
-                    conf.record_count = getCommCareRecordCount(
-                        conf.url, conf.auth_header, conf.project, conf.report_id
-                    )
+                    conf.base_url = base_url % (conf.project, 'configurablereportdata')
+                    conf.base_url += conf.report_id + '/?format=JSON&limit=1'
+                    conf.record_count = get_commcare_record_count(conf)
                 elif conf.download_type == 'commcare_form':
-                    conf.url = base_url % (conf.project, 'form') + '?limit=1'
-                    conf.record_count = getCommCareRecordCount(
-                        conf.url, conf.auth_header
-                    )
+                    conf.base_url = base_url % (conf.project, 'form') + '?limit=1'
+                    conf.record_count = get_commcare_record_count(conf)
                 else:
-                    conf.url = base_url % (conf.project, 'case') + \
+                    conf.base_url = base_url % (conf.project, 'case') + \
                         '?format=JSON&limit=1'
-                    conf.record_count = getCommCareRecordCount(
-                        conf.url, conf.auth_header
-                    )
-
+                    conf.record_count = get_commcare_record_count(conf)
             except KeyError:
                 messages.add_message(
                     request,
@@ -191,7 +182,7 @@ def getCommCareData(request):
             else:
                 read_name = conf.project + ' cases'
             read = Read.objects.create(
-                read_name=read_name, owner=request.user, read_url=conf.url,
+                read_name=read_name, owner=request.user, read_url=conf.base_url,
                 type=ReadType.objects.get(read_type=provider),
                 description=""
             )
@@ -254,10 +245,11 @@ def commcareLogout(request):
 
 @login_required
 def get_commcare_report_names(request):
-
-    project = request.GET['project']
-    commcare_token = ThirdPartyTokens.objects.get(user=request.user, name='CommCare')
-    auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % \
-        {'u' : commcare_token.username, 'a' : commcare_token.token}}
-    reports = getCommCareReportIDs(project, auth_header)
+    print 'ruser', request.user
+    conf = CommCareImportConfig(
+        project=request.GET['project'], tables_user_id=request.user.id
+    )
+    print 'before set conf', conf
+    conf.set_auth_header()
+    reports = get_commcare_report_ids(conf)
     return HttpResponse(json.dumps(reports))

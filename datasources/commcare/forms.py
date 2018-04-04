@@ -9,7 +9,7 @@ from crispy_forms.bootstrap import FormActions
 from django.forms.formsets import formset_factory
 from django.utils.safestring import mark_safe
 
-from .util import getProjects
+from .util import get_projects
 from silo.models import ThirdPartyTokens
 
 
@@ -71,7 +71,7 @@ class CommCareProjectForm(forms.Form):
         self.helper.add_input(Submit('submit', 'Submit'))
         self.helper.add_input(Reset('rest', 'Reset', css_class='btn-warning'))
         super(CommCareProjectForm, self).__init__(*args, **kwargs)
-        self.fields['project'].widget = ListTextWidget(data_list=getProjects(user_id), name='projects')
+        self.fields['project'].widget = ListTextWidget(data_list=get_projects(user_id), name='projects')
         self.fields['silo'].choices = silo_choices
         self.fields['silo'].label = 'Table'
         self.fields['new_table_name'].label = 'New table name*'

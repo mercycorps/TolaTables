@@ -9,7 +9,7 @@ from silo.models import LabelValueStore, Read, Silo, ThirdPartyTokens, ReadType
 from tola.util import getNewestDataDate, cleanKey, addColsToSilo
 
 from commcare.tasks import fetchCommCareData
-from commcare.util import getCommCareRecordCount
+from commcare.util import get_commcare_record_count
 
 class Command(BaseCommand):
     """
@@ -46,13 +46,13 @@ class Command(BaseCommand):
                     last_data_retrieved = str(getNewestDataDate(silo.id))[:10]
                     url = url + "&date_modified_start=" + last_data_retrieved
                     download_type = 'case'
-                    record_count = getCommCareRecordCount(url, auth_header)
+                    record_count = get_commcare_record_count(url, auth_header)
                 elif 'configurablereportdata' in url:
                     download_type = 'commcare_report'
                     url_parts = url.split('/')
                     project = url_parts[4]
                     report_id = url_parts[8]
-                    record_count = getCommCareRecordCount(url, auth_header, project, report_id)
+                    record_count = get_commcare_record_count(url, auth_header, project, report_id)
 
                 if record_count == 0:
                     self.stdout.write('No new commcare data for READ_ID, "%s"' % read.pk)

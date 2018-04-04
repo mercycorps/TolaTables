@@ -10,7 +10,7 @@ from silo.models import LabelValueStore, Read, Silo, ThirdPartyTokens, ReadType
 from tola.util import getNewestDataDate, cleanKey, addColsToSilo
 
 from commcare.tasks import fetchCommCareData
-from commcare.util import getCommCareRecordCount, CommCareImportConfig
+from commcare.util import get_commcare_record_count, CommCareImportConfig
 
 class Command(BaseCommand):
     """
