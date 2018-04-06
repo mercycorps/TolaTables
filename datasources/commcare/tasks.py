@@ -1,19 +1,23 @@
 # Create your tasks here
 from __future__ import absolute_import, unicode_literals
+import json
+import time
+import datetime
+import re
+
+import requests
+from requests.auth import HTTPDigestAuth
 
 from django.utils import timezone
 from django.conf import settings
+from django.contrib.auth.models import User
 
 from celery import shared_task, group
 from pymongo import MongoClient
-from requests.auth import HTTPDigestAuth
 
 from tola.util import getColToTypeDict, cleanKey, saveDataToSilo
-from silo.models import Silo, Read
-
-import requests
-import json
-import time
+from silo.models import Silo, Read, ReadType
+from commcare.models import CommCareCache
 
 
 @shared_task(trail=True)
@@ -26,17 +30,14 @@ def fetchCommCareData(conf, url, start, step):
     start -- What record to start at
     step -- # of records to get in one request
     """
-    # return group(requestCommCareData.s(
-    #     conf, url, offset, 0) for offset in xrange(
-    #         start, conf['record_count'], step
-    #     )
-    # )
-
     return group(requestCommCareData.s(
         conf, url, offset, 0) for offset in xrange(
-            start, 100, step
-        )
-    )
+            start, conf['record_count'], step))
+
+    # return group(requestCommCareData.s(
+    #     conf, url, offset, 0) for offset in xrange(
+    #         start, 100, step))
+
 
 @shared_task(trail=True)
 def requestCommCareData(conf, base_url, offset, req_count):
@@ -44,24 +45,22 @@ def requestCommCareData(conf, base_url, offset, req_count):
     This function will retrieve the appointed page of commcare data and
     return the data in an array.
 
+    conf -- a CommCareImportConfig dict
     url -- the base url
-    offset -- to get the records starting at n
-    auth -- the authorization required
-    auth_header -- True = use Header, False = use Digest authorization
-    silo_id -- the id of the silo being modified, may be empy
-    read_id -- the id of the read being modified, may be empy
-    download_type -- the type of download (commcare_form_name, etc...)
-    extra_data -- the form or report name that is to be fetched, may be empty
-    update -- if true use the update functionality
+    offset -- number of records to skip when calling the CommCare API
     req_count -- number of times this function has called itself
     """
 
+    # Limits the number of times this function can call itself
     MAX_RETRIES = 4
+
+    # Request data from CommCare and process any errors
     url = base_url + "&offset=" + str(offset)
     if conf['use_token']:
         response = requests.get(url, headers=conf['auth_header'])
     else:
-        response = requests.get(url, auth=HTTPDigestAuth(auth['u'], auth['p']))
+        response = requests.get(
+            url, auth=HTTPDigestAuth(conf['tpt_username'], 'password'))
     if response.status_code == 200:
         data = json.loads(response.content)
     elif response.status_code == 429:
@@ -81,7 +80,7 @@ def requestCommCareData(conf, base_url, offset, req_count):
             req_count += 1
             return requestCommCareData(conf, base_url, offset, req_count)
 
-    # Now get the properties of each dataset.
+    # Parse the data and return the results
     if conf['download_type'] == 'commcare_report':
         return parseCommCareReportData(conf, data)
     elif conf['download_type'] == 'commcare_form':
@@ -110,18 +109,88 @@ def parseCommCareCaseData(conf, data):
 @shared_task()
 def parseCommCareFormData(conf, data):
     exclude_tags = ['case', 'meta']
-    data_properties = []
-    data_columns = set()
-    for row in data['objects']:
-        filtered_data = {}
-        for form_key in row['form'].keys():
-            if form_key in exclude_tags or form_key[:1] in ['#', '@']:
+    exclude_chars = ['#', '@']
+    if conf['for_cache']:
+        data_columns = {}
+        for row in data['objects']:
+
+            # Discard any entries that aren't form entries.  Sometimes they
+            # are just updates to the Case information.
+            match = re.search('formdesigner\/(.*)', row['form']['@xmlns'])
+            if match:
+                form_id = match.group(1)
+            else:
+                print 'skipped ', row['form']['@xmlns']
                 continue
-            filtered_data[form_key] = row['form'][form_key]
-        data_properties.append(filtered_data)
-        data_columns.update(filtered_data.keys())
-    storeCommCareData(conf, data_properties)
-    return list(data_columns)
+
+            # See if this form exists in the Cache table. If it doesn't, create
+            # the entry.
+            try:
+                cache_obj = CommCareCache.objects.get(form_id=form_id)
+                conf['silo_id'] = cache_obj.silo_id
+                conf['read_id'] = cache_obj.read_id
+                conf['form_name'] = cache_obj.form_name
+                conf['form_id'] = cache_obj.form_id
+            except CommCareCache.DoesNotExist:
+                conf['form_id'] = form_id
+                conf['form_name'] = row['form']['@name']
+                user = User.objects.get(pk=conf['tables_user_id'])
+                silo_name = "SAVE-Cache-%s-%s" % (
+                    conf['project'], conf['form_name'])
+                silo = Silo.objects.create(
+                    name=silo_name[:60], public=0, owner=user)
+                read = Read.objects.create(
+                    owner=user,
+                    type=ReadType.objects.get(read_type='CommCare'),
+                    read_name=silo_name[:100],
+                    description=silo_name,
+                    read_url=conf['base_url'],
+                    resource_id=form_id)
+                conf['silo_id'] = silo.id
+                conf['read_id'] = read.id
+
+                CommCareCache.objects.create(
+                    project=conf['project'],
+                    form_name=conf['form_name'],
+                    form_id=conf['form_id'],
+                    silo=silo,
+                    read=read,
+                    last_updated=datetime.datetime(2000, 1, 1))
+
+            # Filter out the stuff that isn't data from the returned JSON
+            filtered_data = {}
+            for form_key in row['form'].keys():
+                if form_key in exclude_tags or form_key[:1] in exclude_chars:
+                    continue
+                filtered_data[form_key] = row['form'][form_key]
+                filtered_data['submission_id'] = row['id']
+
+            # Unlike other uses of this funciton, each row could be a different
+            # form/silo. So we'll be returning a dict of sets instead of a set.
+            try:
+                data_columns[conf['silo_id']].update(filtered_data.keys())
+            except KeyError:
+                data_columns[conf['silo_id']] = set(filtered_data.keys())
+            storeCommCareData(conf, [filtered_data])
+
+        # Sets don't serialize, need to convert to lists.
+        for key in data_columns:
+            data_columns[key] = list(data_columns[key])
+        return data_columns
+    else:
+        data_properties = []
+        data_columns = set()
+        for row in data['objects']:
+            filtered_data = {}
+            for form_key in row['form'].keys():
+                if form_key in exclude_tags or form_key[:1] in exclude_chars:
+                    continue
+                filtered_data[form_key] = row['form'][form_key]
+                filtered_data['submission_id'] = row['id']
+            data_properties.append(filtered_data)
+            data_columns.update(filtered_data.keys())
+        storeCommCareData(conf, data_properties)
+        return list(data_columns)
 
 
 @shared_task()
@@ -143,7 +212,6 @@ def parseCommCareReportData(conf, data):
 
 @shared_task()
 def storeCommCareData(conf, data):
-
     data_refined = []
     try:
         fieldToType = getColToTypeDict(Silo.objects.get(pk=conf['silo_id']))
@@ -179,21 +247,27 @@ def storeCommCareData(conf, data):
                 db.label_value_store.update(
                     {'silo_id': conf['silo_id'], 'case_id': row['case_id']},
                     {"$set": row},
-                    upsert=True
-                )
+                    upsert=True)
+        elif conf['download_type'] == 'commcare_form':
+            for row in data_refined:
+                row['edit_date'] = timezone.now()
+                db.label_value_store.update({
+                        'silo_id': conf['silo_id'],
+                        'submission_id': row['submission_id']},
+                    {"$set": row},
+                    upsert=True)
         elif conf['download_type'] == 'commcare_report':
             silo = Silo.objects.get(pk=conf['silo_id'])
             read = Read.objects.get(pk=conf['read_id'])
             db.label_value_store.delete_many({'silo_id': conf['silo_id']})
             saveDataToSilo(silo, data_refined, read)
-    else:
 
+    else:
         for row in data_refined:
             row["create_date"] = timezone.now()
             row["silo_id"] = conf['silo_id']
             row["read_id"] = conf['read_id']
         db.label_value_store.insert(data_refined)
-
 
 # @shared_task()
 # def addExtraFields(columns, silo_id):

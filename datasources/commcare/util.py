@@ -1,21 +1,19 @@
-
-from silo.models import Read, ReadType
-from django.contrib import messages
 import json
 import requests
 
+from pymongo import MongoClient
 from celery import group
 
-from .tasks import fetchCommCareData, requestCommCareData, storeCommCareData
-
-from silo.models import LabelValueStore, Silo
-from tola.util import saveDataToSilo, addColsToSilo, hideSiloColumns
-from pymongo import MongoClient
+from django.contrib import messages
 from django.conf import settings
+
+from .tasks import fetchCommCareData, requestCommCareData, storeCommCareData
+from tola.util import saveDataToSilo, addColsToSilo, hideSiloColumns
+from silo.models import Read, ReadType, ThirdPartyTokens, LabelValueStore, Silo
+
 
 client  = MongoClient(settings.MONGODB_URI)
 db = client.get_database(settings.TOLATABLES_MONGODB_NAME)
-
 
 #this gets a list of projects that users have used in the past to import data from commcare
 #used in commcare/forms.py
@@ -75,7 +73,7 @@ def getCommCareDataHelper(conf):
     else:
         record_limit = 100
 
-    # replace the record limit
+    # replace the record limit and fetch the data
     base_url = conf.base_url.replace('limit=1', 'limit=' + str(record_limit))
     data_raw = fetchCommCareData(conf.to_dict(), base_url, 0, record_limit)
     data_collects = data_raw.apply_async()
@@ -91,7 +89,6 @@ def getCommCareDataHelper(conf):
     hideSiloColumns(silo, ["case_id"])
     return (messages.SUCCESS, "CommCare data imported successfully", columns)
 
-from silo.models import ThirdPartyTokens
 class CommCareImportConfig(object):
     def __init__(self, *args, **kwargs):
         self.download_type = kwargs.get('download_type', None)
@@ -105,6 +102,7 @@ class CommCareImportConfig(object):
         self.record_count = kwargs.get('record_count', None)
         self.tables_user_id = kwargs.get('tables_user_id', None)
         self.use_token = kwargs.get('use_token', True)
+        self.for_cache = kwargs.get('for_cache', False)
         self.tpt_username = kwargs.get('tpt_username', None) #ThirdPartyTokens
         self.token = kwargs.get('token', None) # dict includes username, token
         self.auth_header = kwargs.get('auth_header', None)
