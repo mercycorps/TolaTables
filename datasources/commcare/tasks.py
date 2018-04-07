@@ -169,10 +169,18 @@ def parseCommCareFormData(conf, data):
                     read=read,
                     last_updated=datetime.datetime(1980, 1, 1))
 
-                # Store the application ID with int he Cache table.  Do this
-                # after the initial Cache object creation because taking too
-                # long on this step causes a race condition with multiple
-                # entries for the same project/form in the MySQL DB.
+                # Store additional data in the the Cache table now.
+                # Do this after the initial Cache object creation because taking
+                # too long for the initial save creates a race condition, with
+                # multiple entries for the same project/form getting created
+                # in the MySQL DB.
+
+                # Save the xmlns id of the form, can be used for downloading
+                # form-specific data.
+                cache_obj.xmlns = row['form']['@xmlns']
+
+                # Retreive and save the application name and id.  Used for
+                # displaying form names on the download page.
                 try:
                     cache_obj.app_id = row['app_id']
                 except KeyError:
@@ -192,6 +200,7 @@ def parseCommCareFormData(conf, data):
                         cache_obj.app_name = ''
                 else:
                     cache_obj.app_name = ''
+
                 cache_obj.save()
 
             # Filter out the stuff that isn't data from the returned JSON
