@@ -2,21 +2,20 @@ import json
 import requests
 
 from pymongo import MongoClient
-from celery import group
 
 from django.contrib import messages
 from django.conf import settings
 
-from .tasks import fetchCommCareData, requestCommCareData, storeCommCareData
-from tola.util import saveDataToSilo, addColsToSilo, hideSiloColumns
-from silo.models import Read, ReadType, ThirdPartyTokens, LabelValueStore, Silo
+from .tasks import fetchCommCareData
+from tola.util import addColsToSilo, hideSiloColumns
+from silo.models import Read, ThirdPartyTokens, Silo
 
-
-client  = MongoClient(settings.MONGODB_URI)
+client = MongoClient(settings.MONGODB_URI)
 db = client.get_database(settings.TOLATABLES_MONGODB_NAME)
 
-#this gets a list of projects that users have used in the past to import data from commcare
-#used in commcare/forms.py
+
+# This gets a list of projects that users have used in the past to import
+# data from commcare.
 def get_projects(user_id):
     reads = Read.objects.filter(type__read_type='CommCare', owner_id=user_id)
     projects = []
@@ -25,9 +24,10 @@ def get_projects(user_id):
     return list(set(projects))
 
 
-# get a list of reports available to the user
+# Get a list of reports available to the user
 def get_commcare_report_ids(conf):
-    url = 'https://www.commcarehq.org/a/%s/api/v0.5/simplereportconfiguration/?format=JSON' % conf.project
+    url = 'https://www.commcarehq.org/a/%s/api/v0.5/' \
+        'simplereportconfiguration/?format=JSON' % conf.project
     response = requests.get(url, headers=conf.auth_header)
     response_data = json.loads(response.content)
     report_ids = {}
@@ -38,11 +38,13 @@ def get_commcare_report_ids(conf):
         pass
     return report_ids
 
+
 # Rectrieve record counts for commcare download.
 def get_commcare_record_count(conf):
     # If 'configurablereportdata' is in the url, reports are being downloaded
     if 'configurablereportdata' in conf.base_url:
-        url = 'https://www.commcarehq.org/a/%s/api/v0.5/configurablereportdata/%s/?format=JSON&limit=1'
+        url = 'https://www.commcarehq.org/a/%s/api/v0.5/' \
+            'configurablereportdata/%s/?format=JSON&limit=1'
         url = url % (conf.project, conf.report_id)
         response = requests.get(url, headers=conf.auth_header)
         response_data = json.loads(response.content)
@@ -52,7 +54,6 @@ def get_commcare_record_count(conf):
         response = requests.get(conf.base_url, headers=conf.auth_header)
         response_data = json.loads(response.content)
         return response_data['meta']['total_count']
-
 
 
 def getCommCareDataHelper(conf):
@@ -82,12 +83,13 @@ def getCommCareDataHelper(conf):
     for data in data_retrieval:
         columns = columns.union(data)
 
-    #add new columns to the list of current columns this is slower because
-    #order has to be maintained (2n instead of n)
+    # Add new columns to the list of current columns this is slower because
+    # Order has to be maintained (2n instead of n)
     silo = Silo.objects.get(pk=conf.silo_id)
     addColsToSilo(silo, columns)
     hideSiloColumns(silo, ["case_id"])
     return (messages.SUCCESS, "CommCare data imported successfully", columns)
+
 
 class CommCareImportConfig(object):
     def __init__(self, *args, **kwargs):
@@ -103,10 +105,9 @@ class CommCareImportConfig(object):
         self.tables_user_id = kwargs.get('tables_user_id', None)
         self.use_token = kwargs.get('use_token', True)
         self.for_cache = kwargs.get('for_cache', False)
-        self.tpt_username = kwargs.get('tpt_username', None) #ThirdPartyTokens
-        self.token = kwargs.get('token', None) # dict includes username, token
+        self.tpt_username = kwargs.get('tpt_username', None)  # ThirdPartyToken
+        self.token = kwargs.get('token', None)  # Dict includes username, token
         self.auth_header = kwargs.get('auth_header', None)
-
 
     def set_token(self):
         token_obj = ThirdPartyTokens.objects.get(
@@ -118,12 +119,12 @@ class CommCareImportConfig(object):
     def set_auth_header(self):
         if not self.token:
             self.set_token()
-        self.auth_header = {'Authorization': 'ApiKey %(u)s:%(a)s' % \
-            {'u' : self.tpt_username, 'a' : self.token}}
+        self.auth_header = {
+            'Authorization': 'ApiKey %(u)s:%(a)s' %
+            {'u': self.tpt_username, 'a': self.token}}
 
     def to_dict(self):
         return dict((k, v) for k, v in vars(self).iteritems())
 
     def __str__(self):
         return "\n".join("%s: %s" % (k, v) for k, v in vars(self).iteritems())
-

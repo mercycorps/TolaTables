@@ -3,7 +3,9 @@ from __future__ import absolute_import, unicode_literals
 import json
 import time
 import datetime
+import dateutil
 import re
+import pytz
 
 import requests
 from requests.auth import HTTPDigestAuth
@@ -112,6 +114,7 @@ def parseCommCareFormData(conf, data):
     exclude_chars = ['#', '@']
     if conf['for_cache']:
         data_columns = {}
+        max_date = datetime.datetime(1980, 1, 1).replace(tzinfo=pytz.UTC)
         for row in data['objects']:
 
             # Discard any entries that aren't form entries.  Sometimes they
@@ -123,7 +126,12 @@ def parseCommCareFormData(conf, data):
                 print 'skipped ', row['form']['@xmlns']
                 continue
 
-            # See if this form exists in the Cache table. If it doesn't, create
+            # Store the date if it's a max value
+            row_date = dateutil.parser.parse(row['received_on']) \
+                .replace(tzinfo=pytz.UTC)
+            max_date = max(row_date, max_date)
+
+            # See if this form exists in the Cache. If it doesn't, create
             # the entry.
             try:
                 cache_obj = CommCareCache.objects.get(form_id=form_id)
@@ -149,13 +157,42 @@ def parseCommCareFormData(conf, data):
                 conf['silo_id'] = silo.id
                 conf['read_id'] = read.id
 
-                CommCareCache.objects.create(
+                # Create a cache with a dummy last_updated date.  It will get
+                # overwritten by the calling function
+                cache_obj = CommCareCache.objects.create(
                     project=conf['project'],
                     form_name=conf['form_name'],
                     form_id=conf['form_id'],
+                    app_id='',
+                    app_name='',
                     silo=silo,
                     read=read,
-                    last_updated=datetime.datetime(2000, 1, 1))
+                    last_updated=datetime.datetime(1980, 1, 1))
+
+                # Store the application ID with int he Cache table.  Do this
+                # after the initial Cache object creation because taking too
+                # long on this step causes a race condition with multiple
+                # entries for the same project/form in the MySQL DB.
+                try:
+                    cache_obj.app_id = row['app_id']
+                except KeyError:
+                    cache_obj.app_id = ''
+                if cache_obj.app_id:
+                    app_url = 'https://www.commcarehq.org/a/%s/api/v0.5/' \
+                        'application/%s/?format=json' % (
+                            conf['project'], cache_obj.app_id)
+                    response = requests.get(
+                        app_url, headers=conf['auth_header'])
+                    if response.status_code == 200:
+                        cache_obj.app_name = json.loads(
+                            response.content)['name']
+                    else:
+                        print "Could not retrieve Application name for %s, %s"\
+                            % (conf['project'], conf['form_name'])
+                        cache_obj.app_name = ''
+                else:
+                    cache_obj.app_name = ''
+                cache_obj.save()
 
             # Filter out the stuff that isn't data from the returned JSON
             filtered_data = {}
@@ -165,8 +202,8 @@ def parseCommCareFormData(conf, data):
                 filtered_data[form_key] = row['form'][form_key]
                 filtered_data['submission_id'] = row['id']
 
-            # Unlike other uses of this funciton, each row could be a different
-            # form/silo. So we'll be returning a dict of sets instead of a set.
+            # Each row could be a different form/silo. So we'll be returning
+            # a dict of sets instead of a set.
             try:
                 data_columns[conf['silo_id']].update(filtered_data.keys())
             except KeyError:
@@ -176,7 +213,8 @@ def parseCommCareFormData(conf, data):
         # Sets don't serialize, need to convert to lists.
         for key in data_columns:
             data_columns[key] = list(data_columns[key])
-        return data_columns
+
+        return (data_columns, max_date)
     else:
         data_properties = []
         data_columns = set()

@@ -1,13 +1,16 @@
 import requests
+import datetime
+import pytz
+from dateutil.parser import parse
 
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 
 from silo.models import Read, Silo, ThirdPartyTokens
 from tola.util import cleanKey, addColsToSilo
-
 from commcare.tasks import fetchCommCareData
 from commcare.util import get_commcare_record_count, CommCareImportConfig
+from commcare.models import CommCareCache
 
 
 class Command(BaseCommand):
@@ -22,7 +25,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
 
         disabled_projects = ['prospectsmonitoring']
-
         # Get a list of projects to import data from
         if options['project']:
             project = [options['project']]
@@ -85,9 +87,10 @@ class Command(BaseCommand):
             data_collects = data_raw.apply_async()
             data_retrieval = [v.get() for v in data_collects]
 
-            # Add columns to the Silo
+            # Add columns to the Silo and max date to Cache
             silo_ref = {}
-            for column_dict in data_retrieval:
+            save_date = datetime.datetime(1980, 1, 1).replace(tzinfo=pytz.UTC)
+            for column_dict, max_date in data_retrieval:
                 for silo_id in column_dict:
                     cleaned_colnames = [
                         cleanKey(name) for name in column_dict[silo_id]]
@@ -97,6 +100,13 @@ class Command(BaseCommand):
                         silo = Silo.objects.get(pk=silo_id)
                         silo_ref[silo_id] = silo
                     addColsToSilo(silo, cleaned_colnames)
+
+                save_date = max(
+                    parse(max_date).replace(tzinfo=pytz.UTC), save_date)
+
+            for cache_obj in CommCareCache.objects.filter(project=project):
+                cache_obj.last_updated = save_date
+                cache_obj.save()
 
             self.stdout.write(
                 'Successfully fetched project %s from CommCare' % conf.project)
