@@ -11,7 +11,7 @@ from silo.models import Silo, Read, ReadType, ThirdPartyTokens
 from commcare.models import CommCareCache
 from commcare.forms import CommCareAuthForm, CommCareProjectForm
 from commcare.util import getCommCareDataHelper, get_commcare_record_count, \
-    CommCareImportConfig, get_commcare_report_ids
+    CommCareImportConfig, get_commcare_report_ids, get_commcare_form_ids
 
 
 @login_required
@@ -129,9 +129,7 @@ def getCommCareData(request):
         commcare_form_choices = [('default', 'Select a Form')]
         try:
             conf.form_id = request.POST['commcare_form_name']
-            db_forms = CommCareCache.objects.filter(conf.project) \
-                .values('form_id', 'form_name')
-            commcare_form_choices.extend(db_forms)
+            commcare_form_choices.extend(get_commcare_form_ids(conf))
         except KeyError:
             conf.form_id = False
 
@@ -139,6 +137,7 @@ def getCommCareData(request):
             request.POST,
             silo_choices=silo_choices,
             report_choices=report_choices,
+            commcare_form_choices=commcare_form_choices,
             user_id=conf.tables_user_id
         )
 
@@ -258,8 +257,7 @@ def commcareLogout(request):
 @login_required
 def get_commcare_report_names(request):
     conf = CommCareImportConfig(
-        project=request.GET['project'], tables_user_id=request.user.id
-    )
+        project=request.GET['project'], tables_user_id=request.user.id)
     conf.set_auth_header()
     reports = get_commcare_report_ids(conf)
     return HttpResponse(json.dumps(reports))
@@ -267,9 +265,6 @@ def get_commcare_report_names(request):
 
 @login_required
 def get_commcare_form_names(request):
-    commcare_forms = CommCareCache.objects.filter(
-        project=request.GET['project'])
-    form_map = {}
-    for cform in commcare_forms:
-        form_map[cform.form_id] = cform.form_name
-    return HttpResponse(json.dumps(form_map))
+    conf = CommCareImportConfig(
+        project=request.GET['project'], tables_user_id=request.user.id)
+    return HttpResponse(json.dumps(get_commcare_form_ids(conf)))

@@ -41,7 +41,7 @@ class CommCareProjectForm(forms.Form):
         a different name then what you as a user can see. To see
         your projects true name go to CommCare
         <a href='https://www.commcarehq.org/account/projects/'
-        target='_blank'>settings</a>
+        target='_blank'>settings.</a>
         """
     ))
     silo = forms.ChoiceField(required=True)
@@ -52,12 +52,13 @@ class CommCareProjectForm(forms.Form):
     download_type = forms.ChoiceField(
         choices=TYPE_CHOICES, widget=forms.RadioSelect())
     commcare_report_name = forms.ChoiceField(required=False)
-    commcare_form_name = forms.CharField(required=False)
+    commcare_form_name = forms.ChoiceField(required=False)
 
     def __init__(self, *args, **kwargs):
         silo_choices = kwargs.pop('silo_choices')
         user_id = kwargs.pop('user_id')
         report_choices = kwargs.pop('report_choices', '')
+        commcare_form_choices = kwargs.pop('form_choices', '')
         self.helper = FormHelper()
         self.helper.form_class = 'form-horizontal'
         self.helper.label_class = 'col-sm-3'

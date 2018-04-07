@@ -1,5 +1,6 @@
 import json
 import requests
+from operator import itemgetter
 
 from pymongo import MongoClient
 
@@ -9,6 +10,7 @@ from django.conf import settings
 from .tasks import fetchCommCareData
 from tola.util import addColsToSilo, hideSiloColumns
 from silo.models import Read, ThirdPartyTokens, Silo
+from commcare.models import CommCareCache
 
 client = MongoClient(settings.MONGODB_URI)
 db = client.get_database(settings.TOLATABLES_MONGODB_NAME)
@@ -37,6 +39,17 @@ def get_commcare_report_ids(conf):
     except KeyError:
         pass
     return report_ids
+
+
+# Get a list of reports available to the user
+def get_commcare_form_ids(conf):
+    db_forms = CommCareCache.objects.filter(project=conf.project).values(
+        'form_id', 'form_name', 'app_name')
+    form_tuples = [(f['form_id'], f['app_name'] + ' - ' + f['form_name']) \
+        for f in db_forms]
+    form_tuples.sort(key=itemgetter(1))
+    return form_tuples
+
 
 
 # Rectrieve record counts for commcare download.

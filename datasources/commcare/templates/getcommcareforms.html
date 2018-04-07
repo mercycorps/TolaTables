@@ -216,8 +216,8 @@
                 complete: function(data, status) {
                     if (status == "success") {
                         var options = ['<option value=default>Select a Form</option>'];
-                        $.each(data.responseJSON, function (id, name) {
-                            options.push('<option value=' + id + '>' + name + '</option>');
+                        data.responseJSON.forEach( function(namePair) {
+                            options.push('<option value=' + namePair[0] + '>' + namePair[1] + '</option>');
                         });
                         $('#id_commcare_form_name').html(options.join('\n'));
                     };
