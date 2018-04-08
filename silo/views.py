@@ -1006,7 +1006,6 @@ def updateSiloData(request, pk):
             # Save new records and delete old ones unless it's CommCare. In that
             # case, those functions are handled within the celery tasks.
             if read.type.read_type != 'CommCare':
-
                 if  unique_field_exist == False:
                     lvs = LabelValueStore.objects(
                         silo_id=silo.pk,
@@ -1087,7 +1086,19 @@ def importDataFromRead(request, silo, read):
 
         # how to fetch depends on whether reports or cases are being downloaded
         # url, auth_header, True, data_count, silo, read, request.POST['commcare_report_name']
-        if 'configurablereportdata' in read.read_url:
+        if '/form/' in read.read_url:
+            cache_obj = CommCareCache.objects.get(form_id=conf.form_id)
+            conf.base_url = read.read_url + '&received_on_start=' + \
+                cache_obj.last_updated.isoformat()[:-6]
+            url_parts = read.read_url.split('/')
+            conf.project = cache_obj.project
+            conf.form_id = cache_obj.form_id
+            conf.record_count = get_commcare_record_count(conf)
+            conf.download_type = 'commcare_form'
+            helper_msgs = getCommCareDataHelper(conf)
+            #need to impliment if import failure
+            return (None, 1, helper_msgs)
+        elif 'configurablereportdata' in read.read_url:
             conf.base_url = read.read_url
             url_parts = read.read_url.split('/')
             conf.project = url_parts[4]
@@ -1097,7 +1108,6 @@ def importDataFromRead(request, silo, read):
             helper_msgs = getCommCareDataHelper(conf)
             #need to impliment if import failure
             return (None, 1, helper_msgs)
-
         else:
             conf.download_type = 'cases'
             last_data_retrieved = str(getNewestDataDate(silo.id))[:10]

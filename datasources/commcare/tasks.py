@@ -58,11 +58,12 @@ def requestCommCareData(conf, base_url, offset, req_count):
 
     # Request data from CommCare and process any errors
     url = base_url + "&offset=" + str(offset)
+
     if conf['use_token']:
         response = requests.get(url, headers=conf['auth_header'])
     else:
         response = requests.get(
-            url, auth=HTTPDigestAuth(conf['tpt_username'], 'password'))
+            url, auth=HTTPDigestAuth(conf['tpt_username'], conf['password']))
     if response.status_code == 200:
         data = json.loads(response.content)
     elif response.status_code == 429:
@@ -170,10 +171,10 @@ def parseCommCareFormData(conf, data):
                     last_updated=datetime.datetime(1980, 1, 1))
 
                 # Store additional data in the the Cache table now.
-                # Do this after the initial Cache object creation because taking
-                # too long for the initial save creates a race condition, with
-                # multiple entries for the same project/form getting created
-                # in the MySQL DB.
+                # Do this after the initial Cache object creation because
+                # taking too long for the initial save creates a race
+                # condition, with multiple entries for the same project/form
+                # getting created in the MySQL DB.
 
                 # Save the xmlns id of the form, can be used for downloading
                 # form-specific data.
@@ -285,8 +286,7 @@ def storeCommCareData(conf, data):
         data_refined.append(row)
 
     db = getattr(
-        MongoClient(settings.MONGODB_URI), settings.TOLATABLES_MONGODB_NAME
-    )
+        MongoClient(settings.MONGODB_URI), settings.TOLATABLES_MONGODB_NAME)
     if conf['update']:
         if conf['download_type'] == 'case':
             for row in data_refined:

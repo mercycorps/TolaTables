@@ -154,7 +154,7 @@ def saveDataToSilo(silo, data, read=-1, user=None):
             lvs.read_id = read_source_id
 
         counter = 0
-        # set the fields in the curernt document and save it
+        # set the fields in the current document and save it
 
         row = cleanDataObj(row, silo)
 

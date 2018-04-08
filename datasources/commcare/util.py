@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.conf import settings
 
 from .tasks import fetchCommCareData
-from tola.util import addColsToSilo, hideSiloColumns
+from tola.util import addColsToSilo
 from silo.models import Read, ThirdPartyTokens, Silo
 from commcare.models import CommCareCache
 
@@ -45,11 +45,10 @@ def get_commcare_report_ids(conf):
 def get_commcare_form_ids(conf):
     db_forms = CommCareCache.objects.filter(project=conf.project).values(
         'form_id', 'form_name', 'app_name')
-    form_tuples = [(f['form_id'], f['app_name'] + ' - ' + f['form_name']) \
-        for f in db_forms]
+    form_tuples = [(f['form_id'], f['app_name'] + ' - ' + f['form_name'])
+                   for f in db_forms]
     form_tuples.sort(key=itemgetter(1))
     return form_tuples
-
 
 
 # Rectrieve record counts for commcare download.
@@ -67,6 +66,19 @@ def get_commcare_record_count(conf):
         response = requests.get(conf.base_url, headers=conf.auth_header)
         response_data = json.loads(response.content)
         return response_data['meta']['total_count']
+
+
+def copy_from_cache(cache_silo, silo, read):
+    cached_data = db.label_value_store.find({
+        'silo_id': cache_silo.id})
+    for record in cached_data:
+        record.pop('_id')
+        record['silo_id'] = silo.id
+        record['read_id'] = read.id
+        db.label_value_store.insert(record)
+
+    silo.columns = cache_silo.columns
+    silo.save()
 
 
 def getCommCareDataHelper(conf):
@@ -89,6 +101,10 @@ def getCommCareDataHelper(conf):
 
     # replace the record limit and fetch the data
     base_url = conf.base_url.replace('limit=1', 'limit=' + str(record_limit))
+    if conf.download_type == 'commcare_form':
+        cache_obj = CommCareCache.objects.get(form_id=conf.form_id)
+        base_url += '&received_on_start=' + \
+            cache_obj.last_updated.isoformat()[:-6]
     data_raw = fetchCommCareData(conf.to_dict(), base_url, 0, record_limit)
     data_collects = data_raw.apply_async()
     data_retrieval = [v.get() for v in data_collects]
@@ -100,7 +116,6 @@ def getCommCareDataHelper(conf):
     # Order has to be maintained (2n instead of n)
     silo = Silo.objects.get(pk=conf.silo_id)
     addColsToSilo(silo, columns)
-    hideSiloColumns(silo, ["case_id"])
     return (messages.SUCCESS, "CommCare data imported successfully", columns)
 
 

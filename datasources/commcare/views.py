@@ -11,7 +11,8 @@ from silo.models import Silo, Read, ReadType, ThirdPartyTokens
 from commcare.models import CommCareCache
 from commcare.forms import CommCareAuthForm, CommCareProjectForm
 from commcare.util import getCommCareDataHelper, get_commcare_record_count, \
-    CommCareImportConfig, get_commcare_report_ids, get_commcare_form_ids
+    CommCareImportConfig, get_commcare_report_ids, get_commcare_form_ids, \
+    copy_from_cache
 
 
 @login_required
@@ -160,8 +161,12 @@ def getCommCareData(request):
                     conf.base_url += conf.report_id + '/?format=JSON&limit=1'
                     conf.record_count = get_commcare_record_count(conf)
                 elif conf.download_type == 'commcare_form':
-                    conf.base_url = base_url % (
-                        conf.project, 'form') + '?limit=1'
+                    # Use xmlns and received_on_start parameters to retrieve
+                    # only form specific post-cache data.
+                    cache_obj = CommCareCache.objects.get(
+                        form_id=conf.form_id)
+                    conf.base_url = base_url % (conf.project, 'form')
+                    conf.base_url += '?limit=1&xlmns=' + cache_obj.xmlns
                     conf.record_count = get_commcare_record_count(conf)
                 else:
                     conf.base_url = base_url % (conf.project, 'case') + \
@@ -171,17 +176,19 @@ def getCommCareData(request):
                 messages.add_message(
                     request,
                     messages.ERROR,
-                    "The CommCare API is not responding.  \
+                    "The CommCare API is not responding. \
                         Please try again later")
                 return render(
                     request,
                     'getcommcareforms.html',
                     {'form': form, 'auth': 'authenticated'})
 
+            # Create Silo and Read for the new Table
             if conf.download_type == 'commcare_report':
                 read_name = '%s report - %s' % (conf.project, report_name)
             elif conf.download_type == 'commcare_form':
-                read_name = '%s form - %s' % (conf.project, report_name)
+                read_name = '%s form - %s' % (
+                    conf.project, cache_obj.form_name)
             else:
                 read_name = conf.project + ' cases'
             read = Read.objects.create(
@@ -202,6 +209,15 @@ def getCommCareData(request):
             elif read not in silo.reads.all():
                 silo.reads.add(read)
             conf.silo_id = silo.id
+
+            # Copy cached form data, then update with new
+            # transactions. Do this here because it's likely that
+            # there won't be any additional form values to download,
+            # which means the celery process will be skipped.
+            if conf.download_type == 'commcare_form':
+                cache_silo = Silo.objects.get(pk=cache_obj.silo_id)
+                copy_from_cache(cache_silo, silo, read)
+                conf.update = True
 
             # Retrieve and save the data.
             # TODO: catch retrieval failures

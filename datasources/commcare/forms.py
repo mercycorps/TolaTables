@@ -58,7 +58,7 @@ class CommCareProjectForm(forms.Form):
         silo_choices = kwargs.pop('silo_choices')
         user_id = kwargs.pop('user_id')
         report_choices = kwargs.pop('report_choices', '')
-        commcare_form_choices = kwargs.pop('form_choices', '')
+        commcare_form_choices = kwargs.pop('commcare_form_choices', '')
         self.helper = FormHelper()
         self.helper.form_class = 'form-horizontal'
         self.helper.label_class = 'col-sm-3'
@@ -77,6 +77,7 @@ class CommCareProjectForm(forms.Form):
         self.fields['commcare_report_name'].choices = report_choices
         self.fields['commcare_report_name'].label = 'CommCare report name*'
         self.fields['commcare_form_name'].label = 'CommCare form name*'
+        self.fields['commcare_form_name'].choices = commcare_form_choices
 
     def clean(self):
         cleaned_data = super(CommCareProjectForm, self).clean()
