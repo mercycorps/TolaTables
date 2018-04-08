@@ -46,7 +46,7 @@ from tola.util import importJSON, saveDataToSilo, getSiloColumnNames,\
     getNewestDataDate, addColsToSilo, deleteSiloColumns, hideSiloColumns, \
     getCompleteSiloColumnNames, setSiloColumnType, getColToTypeDict
 
-
+from commcare.models import CommCareCache
 from commcare.tasks import fetchCommCareData
 from commcare.util import get_commcare_record_count, getCommCareDataHelper, \
     CommCareImportConfig
@@ -1084,10 +1084,9 @@ def importDataFromRead(request, silo, read):
         except Exception as e:
             return (None,0,(messages.ERROR, "You need to login to commcare using an API Key to access this functionality"))
 
-        # how to fetch depends on whether reports or cases are being downloaded
-        # url, auth_header, True, data_count, silo, read, request.POST['commcare_report_name']
+        # How to fetch depends on whether reports or cases are being downloaded
         if '/form/' in read.read_url:
-            cache_obj = CommCareCache.objects.get(form_id=conf.form_id)
+            cache_obj = CommCareCache.objects.get(form_id=read.resource_id)
             conf.base_url = read.read_url + '&received_on_start=' + \
                 cache_obj.last_updated.isoformat()[:-6]
             url_parts = read.read_url.split('/')

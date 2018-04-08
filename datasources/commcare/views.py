@@ -195,6 +195,7 @@ def getCommCareData(request):
                 read_name=read_name,
                 owner=request.user,
                 read_url=conf.base_url,
+                resource_id=conf.form_id,
                 type=ReadType.objects.get(read_type=provider),
                 description="")
             conf.read_id = read.id
