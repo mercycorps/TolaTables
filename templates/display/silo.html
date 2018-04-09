@@ -410,8 +410,13 @@
 
                                 }
                                 else{
-                                  //for any other kind of object
-                                  return Object.values(data);
+                                    //for any other kind of object
+                                    // return Object.values(data);
+                                    temp = ''
+                                    $.each(data, function (k, v){
+                                        temp += k + ': ' + v + '<br/>'
+                                    })
+                                    return temp
                                 }
                             } else {
                               if (data == undefined) {
