@@ -10,7 +10,7 @@ from silo.models import Silo, Read
 class CommCareCache(models.Model):
     project = models.CharField(max_length=255)
     form_name = models.CharField(max_length=1000)
-    form_id = models.CharField(max_length=255)
+    form_id = models.CharField(max_length=255, unique=True)
     xmlns = models.CharField(max_length=255)
     app_name = models.CharField(max_length=255)
     app_id = models.CharField(max_length=255)

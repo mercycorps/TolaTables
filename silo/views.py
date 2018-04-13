@@ -49,7 +49,7 @@ from tola.util import importJSON, saveDataToSilo, getSiloColumnNames,\
 from commcare.models import CommCareCache
 from commcare.tasks import fetchCommCareData
 from commcare.util import get_commcare_record_count, getCommCareDataHelper, \
-    CommCareImportConfig
+    CommCareImportConfig, copy_from_cache
 
 from .models import Silo, Read, ReadType, ThirdPartyTokens, LabelValueStore, \
     Tag, UniqueFields, MergedSilosFieldMapping, TolaSites, PIIColumn, \
@@ -1079,10 +1079,20 @@ def importDataFromRead(request, silo, read):
             read_id=read.id, update=True
         )
 
+        # Ensure they user has an auth token and still has access to this
+        # CommCare project
         try:
             conf.set_auth_header()
         except Exception as e:
             return (None,0,(messages.ERROR, "You need to login to commcare using an API Key to access this functionality"))
+        conf.base_url = read.read_url
+        response = requests.get(conf.base_url, headers=conf.auth_header)
+        if response.status_code == 401:
+            commcare_token.delete()
+            return (None,0,(messages.ERROR, "Your Commcare usernmane or API Key is incorrect"))
+        elif response.status_code != 200:
+            return (None,0,(messages.ERROR, "An error importing from commcare has occured: %s %s " % (response.status_code, response.text)))
+
 
         # How to fetch depends on whether reports or cases are being downloaded
         if '/form/' in read.read_url:
@@ -1093,9 +1103,17 @@ def importDataFromRead(request, silo, read):
             conf.project = cache_obj.project
             conf.form_id = cache_obj.form_id
             conf.record_count = get_commcare_record_count(conf)
+
+            db.label_value_store.delete_many({'silo_id': silo.id})
+            cache_silo = Silo.objects.get(pk=cache_obj.silo.id)
+            copy_from_cache(cache_silo, silo, read)
+
+            if conf.record_count == 0:
+                return (None, 2, (messages.SUCCESS, "Your commcare data was already up to date"))
             conf.download_type = 'commcare_form'
+
             helper_msgs = getCommCareDataHelper(conf)
-            #need to impliment if import failure
+            # Need to implement if import failure
             return (None, 1, helper_msgs)
         elif 'configurablereportdata' in read.read_url:
             conf.base_url = read.read_url
@@ -1105,17 +1123,14 @@ def importDataFromRead(request, silo, read):
             conf.record_count = get_commcare_record_count(conf)
             conf.download_type = 'commcare_report'
             helper_msgs = getCommCareDataHelper(conf)
-            #need to impliment if import failure
+            # Need to implement if import failure
             return (None, 1, helper_msgs)
         else:
             conf.download_type = 'cases'
             last_data_retrieved = str(getNewestDataDate(silo.id))[:10]
             url = "/".join(read.read_url.split("/")[:8]) + "?date_modified_start=" + last_data_retrieved + "&" + "limit="
             response = requests.get(url+ str(1), headers=conf.auth_header)
-            if response.status_code == 401:
-                commcare_token.delete()
-                return (None,0,(messages.ERROR, "Your Commcare usernmane or API Key is incorrect"))
-            elif response.status_code != 200:
+            if response.status_code != 200:
                 return (None,0,(messages.ERROR, "An error importing from commcare has occured: %s %s " % (response.status_code, response.text)))
             metadata = json.loads(response.content)
             if metadata['meta']['total_count'] == 0:

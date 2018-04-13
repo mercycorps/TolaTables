@@ -35,12 +35,20 @@ class Command(BaseCommand):
             for read_url in read_urls:
                 projects.add(read_url.split('/')[4])
 
-        base_url = 'https://www.commcarehq.org/a/%s/api/v0.5/form/?limit=1'
+        base_url = 'https://www.commcarehq.org/a/%s/api/v0.5/form/' \
+            '?limit=1&received_on_start=%s'
 
         for project in projects:
             if project in disabled_projects:
                 continue
             print 'Downloading ' + project
+
+            try:
+                cache_obj = CommCareCache.objects.filter(project=project) \
+                    .first()
+                last_updated = cache_obj.last_updated.isoformat()[:-6]
+            except (IndexError, AttributeError):
+                last_updated = '1980-01-01'
 
             conf = CommCareImportConfig(
                 project=project,
@@ -48,7 +56,7 @@ class Command(BaseCommand):
                     email='systems@mercycorps.org',
                     username='systems'
                 ).id,
-                base_url=base_url % project,
+                base_url=base_url % (project, last_updated),
                 download_type='commcare_form',
                 update=True,
                 use_token=True,

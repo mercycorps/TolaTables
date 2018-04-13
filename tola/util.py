@@ -157,12 +157,15 @@ def saveDataToSilo(silo, data, read=-1, user=None):
         # set the fields in the current document and save it
 
         row = cleanDataObj(row, silo)
-
         for key, val in row.iteritems():
             if not isinstance(key, tuple):
                 if key not in keys:
                     keys.append(key)
-                setattr(lvs, key, val)
+                try:
+                    val = val.encode('utf-8')
+                except:
+                    pass
+                setattr(lvs, key.encode('utf-8'), val)
 
         counter += 1
         lvs = calculateFormulaCell(lvs,silo)

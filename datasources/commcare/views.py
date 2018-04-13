@@ -166,8 +166,13 @@ def getCommCareData(request):
                     cache_obj = CommCareCache.objects.get(
                         form_id=conf.form_id)
                     conf.base_url = base_url % (conf.project, 'form')
-                    conf.base_url += '?limit=1&xlmns=' + cache_obj.xmlns
+                    conf.base_url += '?limit=1&xmlns=' + cache_obj.xmlns
+                    orig_url = conf.base_url
+                    conf.base_url += '&received_on_start=' + \
+                        cache_obj.last_updated.isoformat()[:-6]
+
                     conf.record_count = get_commcare_record_count(conf)
+                    conf.base_url = orig_url
                 else:
                     conf.base_url = base_url % (conf.project, 'case') + \
                         '?format=JSON&limit=1'
@@ -228,7 +233,7 @@ def getCommCareData(request):
             return HttpResponseRedirect(reverse_lazy(
                 "siloDetail", kwargs={'silo_id': silo.id}))
 
-        # Need to implement some sort of error catching code here.  CommCare
+        # TODO: Implement some sort of error catching code here.  CommCare
         # sometimes returns html error messages to API calls
         # else:
         #     for m in messages.get_messages(request):

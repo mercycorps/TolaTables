@@ -9,17 +9,17 @@ import pytz
 
 import requests
 from requests.auth import HTTPDigestAuth
-
-from django.utils import timezone
-from django.conf import settings
-from django.contrib.auth.models import User
-
 from celery import shared_task, group
 from pymongo import MongoClient
 
+from django.db import IntegrityError
+from django.conf import settings
+from django.contrib.auth.models import User
+from django.utils import timezone
+
+from commcare.models import CommCareCache
 from tola.util import getColToTypeDict, cleanKey, saveDataToSilo
 from silo.models import Silo, Read, ReadType
-from commcare.models import CommCareCache
 
 
 @shared_task(trail=True)
@@ -38,7 +38,7 @@ def fetchCommCareData(conf, url, start, step):
 
     # return group(requestCommCareData.s(
     #     conf, url, offset, 0) for offset in xrange(
-    #         start, 100, step))
+    #         start, 1000, step))
 
 
 @shared_task(trail=True)
@@ -113,9 +113,14 @@ def parseCommCareCaseData(conf, data):
 def parseCommCareFormData(conf, data):
     exclude_tags = ['case', 'meta']
     exclude_chars = ['#', '@']
+    default_date = datetime.datetime(1980, 1, 1).replace(tzinfo=pytz.UTC)
+
+    # Cacheing is handled differently because each row could be from a
+    # different form and needs to be processed individually.  Also need to
+    # check for a pre-existing cache entry or create one.
     if conf['for_cache']:
         data_columns = {}
-        max_date = datetime.datetime(1980, 1, 1).replace(tzinfo=pytz.UTC)
+        max_date = default_date
         for row in data['objects']:
 
             # Discard any entries that aren't form entries.  Sometimes they
@@ -124,7 +129,7 @@ def parseCommCareFormData(conf, data):
             if match:
                 form_id = match.group(1)
             else:
-                print 'skipped ', row['form']['@xmlns']
+                print 'Skipped ', row['form']['@xmlns']
                 continue
 
             # Store the date if it's a max value
@@ -132,8 +137,8 @@ def parseCommCareFormData(conf, data):
                 .replace(tzinfo=pytz.UTC)
             max_date = max(row_date, max_date)
 
-            # See if this form exists in the Cache. If it doesn't, create
-            # the entry.
+            # Use the cached data if it exists, if there is no cache
+            # create an entry for the current form
             try:
                 cache_obj = CommCareCache.objects.get(form_id=form_id)
                 conf['silo_id'] = cache_obj.silo_id
@@ -141,6 +146,7 @@ def parseCommCareFormData(conf, data):
                 conf['form_name'] = cache_obj.form_name
                 conf['form_id'] = cache_obj.form_id
             except CommCareCache.DoesNotExist:
+                created = False
                 conf['form_id'] = form_id
                 conf['form_name'] = row['form']['@name']
                 user = User.objects.get(pk=conf['tables_user_id'])
@@ -154,57 +160,71 @@ def parseCommCareFormData(conf, data):
                     read_name=silo_name[:100],
                     description=silo_name,
                     read_url=conf['base_url'],
-                    resource_id=form_id)
-                conf['silo_id'] = silo.id
-                conf['read_id'] = read.id
+                    resource_id=conf['form_id'])
 
-                # Create a cache with a dummy last_updated date.  It will get
-                # overwritten by the calling function
-                cache_obj = CommCareCache.objects.create(
-                    project=conf['project'],
-                    form_name=conf['form_name'],
-                    form_id=conf['form_id'],
-                    app_id='',
-                    app_name='',
-                    silo=silo,
-                    read=read,
-                    last_updated=datetime.datetime(1980, 1, 1))
-
-                # Store additional data in the the Cache table now.
-                # Do this after the initial Cache object creation because
-                # taking too long for the initial save creates a race
-                # condition, with multiple entries for the same project/form
-                # getting created in the MySQL DB.
-
-                # Save the xmlns id of the form, can be used for downloading
-                # form-specific data.
-                cache_obj.xmlns = row['form']['@xmlns']
-
-                # Retreive and save the application name and id.  Used for
-                # displaying form names on the download page.
+                # Additional try block accomodates a race condition
+                # where a different celery worker has created the cache
+                # between the exists-check and the creation step in this
+                # worker.
                 try:
-                    cache_obj.app_id = row['app_id']
-                except KeyError:
-                    cache_obj.app_id = ''
-                if cache_obj.app_id:
-                    app_url = 'https://www.commcarehq.org/a/%s/api/v0.5/' \
-                        'application/%s/?format=json' % (
-                            conf['project'], cache_obj.app_id)
-                    response = requests.get(
-                        app_url, headers=conf['auth_header'])
-                    if response.status_code == 200:
-                        cache_obj.app_name = json.loads(
-                            response.content)['name']
-                    else:
-                        print "Could not retrieve Application name for %s, %s"\
-                            % (conf['project'], conf['form_name'])
-                        cache_obj.app_name = ''
-                else:
-                    cache_obj.app_name = ''
+                    cache_obj, created = CommCareCache.objects.get_or_create(
+                        project=conf['project'],
+                        form_id=conf['form_id'],
+                        defaults={
+                            'form_name': conf['form_name'],
+                            'app_id': '',
+                            'app_name': '',
+                            'silo': silo,
+                            'read': read,
+                            'last_updated': default_date})
+                except IntegrityError:
+                    cache_obj = CommCareCache.objects.get(form_id=form_id)
+                    conf['silo_id'] = cache_obj.silo_id
+                    conf['read_id'] = cache_obj.read_id
+                    conf['form_name'] = cache_obj.form_name
+                    conf['form_id'] = cache_obj.form_id
+                    print 'Collision avoided for form id ', form_id
 
-                cache_obj.save()
+                if created:
+                    conf['silo_id'] = silo.id
+                    conf['read_id'] = read.id
+
+                    # Save the xmlns id of the form, can be used for downloading
+                    # form-specific data.
+                    cache_obj.xmlns = row['form']['@xmlns']
+
+                    # The CommCare application id is used to build the
+                    # dropdown by which users select a form.
+                    try:
+                        cache_obj.app_id = row['app_id']
+                    except KeyError:
+                        cache_obj.app_id = ''
+                    if cache_obj.app_id:
+                        app_url = 'https://www.commcarehq.org/a/%s/api/v0.5/' \
+                            'application/%s/?format=json' % (
+                                conf['project'], cache_obj.app_id)
+                        response = requests.get(
+                            app_url, headers=conf['auth_header'])
+                        if response.status_code == 200:
+                            cache_obj.app_name = json.loads(
+                                response.content)['name']
+                        else:
+                            print "Could not retrieve Application name for %s, %s"\
+                                % (conf['project'], conf['form_name'])
+                            cache_obj.app_name = ''
+                    else:
+                        cache_obj.app_name = ''
+
+                    cache_obj.save()
+                # Need to delete the silo and read that were never used to
+                # create a cache entry.
+                else:
+                    silo.delete()
+                    read.delete()
 
             # Filter out the stuff that isn't data from the returned JSON
+            # (CommCare doesn't provide a clean data object, the form
+            # data is mixed in with other metadata, all in the same object)
             filtered_data = {}
             for form_key in row['form'].keys():
                 if form_key in exclude_tags or form_key[:1] in exclude_chars:
@@ -212,7 +232,7 @@ def parseCommCareFormData(conf, data):
                 filtered_data[form_key] = row['form'][form_key]
                 filtered_data['submission_id'] = row['id']
 
-            # Each row could be a different form/silo. So we'll be returning
+            # Each row could be a different form/silo. So we'll be storing
             # a dict of sets instead of a set.
             try:
                 data_columns[conf['silo_id']].update(filtered_data.keys())
@@ -225,18 +245,19 @@ def parseCommCareFormData(conf, data):
             data_columns[key] = list(data_columns[key])
 
         return (data_columns, max_date)
+    # This handles regular user request, not a cache building request.
     else:
         data_properties = []
         data_columns = set()
         for row in data['objects']:
-            filtered_data = {}
+            filtered_row = {}
             for form_key in row['form'].keys():
                 if form_key in exclude_tags or form_key[:1] in exclude_chars:
                     continue
-                filtered_data[form_key] = row['form'][form_key]
-                filtered_data['submission_id'] = row['id']
-            data_properties.append(filtered_data)
-            data_columns.update(filtered_data.keys())
+                filtered_row[form_key] = row['form'][form_key]
+            filtered_row['submission_id'] = row['id']
+            data_properties.append(filtered_row)
+            data_columns.update(filtered_row.keys())
         storeCommCareData(conf, data_properties)
         return list(data_columns)
 
@@ -285,36 +306,37 @@ def storeCommCareData(conf, data):
 
         data_refined.append(row)
 
-    db = getattr(
-        MongoClient(settings.MONGODB_URI), settings.TOLATABLES_MONGODB_NAME)
-    if conf['update']:
-        if conf['download_type'] == 'case':
-            for row in data_refined:
-                row['edit_date'] = timezone.now()
-                db.label_value_store.update(
-                    {'silo_id': conf['silo_id'], 'case_id': row['case_id']},
-                    {"$set": row},
-                    upsert=True)
-        elif conf['download_type'] == 'commcare_form':
-            for row in data_refined:
-                row['edit_date'] = timezone.now()
-                db.label_value_store.update({
-                        'silo_id': conf['silo_id'],
-                        'submission_id': row['submission_id']},
-                    {"$set": row},
-                    upsert=True)
-        elif conf['download_type'] == 'commcare_report':
-            silo = Silo.objects.get(pk=conf['silo_id'])
-            read = Read.objects.get(pk=conf['read_id'])
-            db.label_value_store.delete_many({'silo_id': conf['silo_id']})
-            saveDataToSilo(silo, data_refined, read)
+    client = MongoClient(settings.MONGODB_URI)
+    db = client.get_database(settings.TOLATABLES_MONGODB_NAME)
 
-    else:
+    if conf['download_type'] == 'commcare_form':
         for row in data_refined:
-            row["create_date"] = timezone.now()
-            row["silo_id"] = conf['silo_id']
-            row["read_id"] = conf['read_id']
-        db.label_value_store.insert(data_refined)
+            row['edit_date'] = timezone.now()
+            row['silo_id'] = conf['silo_id']
+            row['read_id'] = conf['read_id']
+        db.label_value_store.insert_many(data_refined)
+    else:
+        if conf['update']:
+            if conf['download_type'] == 'case':
+                for row in data_refined:
+                    row['edit_date'] = timezone.now()
+                    db.label_value_store.update(
+                        {'silo_id': conf['silo_id'], 'case_id': row['case_id']},
+                        {"$set": row},
+                        upsert=True)
+
+            elif conf['download_type'] == 'commcare_report':
+                silo = Silo.objects.get(pk=conf['silo_id'])
+                read = Read.objects.get(pk=conf['read_id'])
+                db.label_value_store.delete_many({'silo_id': conf['silo_id']})
+                saveDataToSilo(silo, data_refined, read)
+
+        else:
+            for row in data_refined:
+                row["create_date"] = timezone.now()
+                row["silo_id"] = conf['silo_id']
+                row["read_id"] = conf['read_id']
+            db.label_value_store.insert(data_refined)
 
 # @shared_task()
 # def addExtraFields(columns, silo_id):
