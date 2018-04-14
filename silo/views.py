@@ -48,8 +48,9 @@ from tola.util import importJSON, saveDataToSilo, getSiloColumnNames,\
 
 from commcare.models import CommCareCache
 from commcare.tasks import fetchCommCareData
-from commcare.util import get_commcare_record_count, getCommCareDataHelper, \
+from commcare.util import get_commcare_record_count, \
     CommCareImportConfig, copy_from_cache
+from commcare.views import getCommCareDataHelper
 
 from .models import Silo, Read, ReadType, ThirdPartyTokens, LabelValueStore, \
     Tag, UniqueFields, MergedSilosFieldMapping, TolaSites, PIIColumn, \

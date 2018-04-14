@@ -8,9 +8,11 @@ from django.http import HttpResponseRedirect, HttpResponse
 from django.shortcuts import redirect, render
 
 from silo.models import Silo, Read, ReadType, ThirdPartyTokens
+from tola.util import addColsToSilo
 from commcare.models import CommCareCache
 from commcare.forms import CommCareAuthForm, CommCareProjectForm
-from commcare.util import getCommCareDataHelper, get_commcare_record_count, \
+from commcare.tasks import fetchCommCareData
+from commcare.util import get_commcare_record_count, \
     CommCareImportConfig, get_commcare_report_ids, get_commcare_form_ids, \
     copy_from_cache
 
@@ -274,6 +276,44 @@ def commcareLogout(request):
         account.  Any Tables you have created with this account ARE still \
         available, but you must log back in here to update them.")
     return HttpResponseRedirect(reverse_lazy('getCommCareAuth'))
+
+
+def getCommCareDataHelper(conf):
+    """
+    Use fetch and request CommCareData to store all of the case data
+
+    domain -- the domain name used for a commcare project
+    auth -- the authorization required
+    auth_header -- True = use Header, False = use Digest authorization
+    total_cases -- total cases to get
+    silo - silo to put the data into
+    read -- read that the data is apart of
+    """
+
+    # CommCare has a max limit of 50 for report downloads
+    if conf.download_type == 'commcare_report':
+        record_limit = 50
+    else:
+        record_limit = 100
+
+    # replace the record limit and fetch the data
+    base_url = conf.base_url.replace('limit=1', 'limit=' + str(record_limit))
+    if conf.download_type == 'commcare_form':
+        cache_obj = CommCareCache.objects.get(form_id=conf.form_id)
+        base_url += '&received_on_start=' + \
+            cache_obj.last_updated.isoformat()[:-6]
+    data_raw = fetchCommCareData(conf.to_dict(), base_url, 0, record_limit)
+    data_collects = data_raw.apply_async()
+    data_retrieval = [v.get() for v in data_collects]
+    columns = set()
+    for data in data_retrieval:
+        columns = columns.union(data)
+
+    # Add new columns to the list of current columns this is slower because
+    # Order has to be maintained (2n instead of n)
+    silo = Silo.objects.get(pk=conf.silo_id)
+    addColsToSilo(silo, columns)
+    return (messages.SUCCESS, "CommCare data imported successfully", columns)
 
 
 @login_required

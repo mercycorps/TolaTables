@@ -1,6 +1,7 @@
 import requests
 import datetime
 import pytz
+
 from dateutil.parser import parse
 
 from django.core.management.base import BaseCommand
@@ -11,7 +12,6 @@ from tola.util import cleanKey, addColsToSilo
 from commcare.tasks import fetchCommCareData
 from commcare.util import get_commcare_record_count, CommCareImportConfig
 from commcare.models import CommCareCache
-
 
 class Command(BaseCommand):
     """
@@ -104,10 +104,21 @@ class Command(BaseCommand):
                         cleanKey(name) for name in column_dict[silo_id]]
                     if silo_id in silo_ref:
                         silo = silo_ref[silo_id]
+                        addColsToSilo(silo, cleaned_colnames)
                     else:
-                        silo = Silo.objects.get(pk=silo_id)
-                        silo_ref[silo_id] = silo
-                    addColsToSilo(silo, cleaned_colnames)
+                        try:
+                            silo = Silo.objects.get(pk=silo_id)
+                            silo_ref[silo_id] = silo
+                            addColsToSilo(silo, cleaned_colnames)
+                        except ValueError as e:
+                            print 'ERROR: Null value for silo_id'
+                            print 'Conf object: ', conf
+                            print 'Column dict', column_dict
+                            print 'Error message: ', e
+
+
+
+
 
                 save_date = max(
                     parse(max_date).replace(tzinfo=pytz.UTC), save_date)

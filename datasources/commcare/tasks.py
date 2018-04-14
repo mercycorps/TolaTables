@@ -18,6 +18,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from commcare.models import CommCareCache
+from commcare.util import flatten
 from tola.util import getColToTypeDict, cleanKey, saveDataToSilo
 from silo.models import Silo, Read, ReadType
 
@@ -32,13 +33,13 @@ def fetchCommCareData(conf, url, start, step):
     start -- What record to start at
     step -- # of records to get in one request
     """
-    return group(requestCommCareData.s(
-        conf, url, offset, 0) for offset in xrange(
-            start, conf['record_count'], step))
-
     # return group(requestCommCareData.s(
     #     conf, url, offset, 0) for offset in xrange(
-    #         start, 1000, step))
+    #         start, conf['record_count'], step))
+
+    return group(requestCommCareData.s(
+        conf, url, offset, 0) for offset in xrange(
+            start, 3000, step))
 
 
 @shared_task(trail=True)
@@ -122,7 +123,6 @@ def parseCommCareFormData(conf, data):
         data_columns = {}
         max_date = default_date
         for row in data['objects']:
-
             # Discard any entries that aren't form entries.  Sometimes they
             # are just updates to the Case information.
             match = re.search('formdesigner\/(.*)', row['form']['@xmlns'])
@@ -145,6 +145,7 @@ def parseCommCareFormData(conf, data):
                 conf['read_id'] = cache_obj.read_id
                 conf['form_name'] = cache_obj.form_name
                 conf['form_id'] = cache_obj.form_id
+                # print 'found existing cache with silo ', conf['silo_id']
             except CommCareCache.DoesNotExist:
                 created = False
                 conf['form_id'] = form_id
@@ -152,8 +153,6 @@ def parseCommCareFormData(conf, data):
                 user = User.objects.get(pk=conf['tables_user_id'])
                 silo_name = "SAVE-Cache-%s-%s" % (
                     conf['project'], conf['form_name'])
-                silo = Silo.objects.create(
-                    name=silo_name[:60], public=0, owner=user)
                 read = Read.objects.create(
                     owner=user,
                     type=ReadType.objects.get(read_type='CommCare'),
@@ -162,10 +161,15 @@ def parseCommCareFormData(conf, data):
                     read_url=conf['base_url'],
                     resource_id=conf['form_id'])
 
+                silo = Silo.objects.create(
+                    name=silo_name[:60], public=0, owner=user)
+                silo.reads.add(read)
+
                 # Additional try block accomodates a race condition
                 # where a different celery worker has created the cache
                 # between the exists-check and the creation step in this
                 # worker.
+                print 'No cache found for %s, ready to try creating with silo %s' % (conf['form_name'], conf['silo_id'])
                 try:
                     cache_obj, created = CommCareCache.objects.get_or_create(
                         project=conf['project'],
@@ -177,18 +181,20 @@ def parseCommCareFormData(conf, data):
                             'silo': silo,
                             'read': read,
                             'last_updated': default_date})
+                    print 'after create created value and cacheobj', created, cache_obj.silo.id
                 except IntegrityError:
                     cache_obj = CommCareCache.objects.get(form_id=form_id)
                     conf['silo_id'] = cache_obj.silo_id
                     conf['read_id'] = cache_obj.read_id
                     conf['form_name'] = cache_obj.form_name
                     conf['form_id'] = cache_obj.form_id
+                    print 'Ninjad!.  Cached silo id is ', conf['silo_id']
                     print 'Collision avoided for form id ', form_id
-
+                print 'created_value', created
                 if created:
                     conf['silo_id'] = silo.id
                     conf['read_id'] = read.id
-
+                    print 'created with silo_id ', conf['silo_id']
                     # Save the xmlns id of the form, can be used for downloading
                     # form-specific data.
                     cache_obj.xmlns = row['form']['@xmlns']
@@ -225,20 +231,22 @@ def parseCommCareFormData(conf, data):
             # Filter out the stuff that isn't data from the returned JSON
             # (CommCare doesn't provide a clean data object, the form
             # data is mixed in with other metadata, all in the same object)
+            print 'final silo id ', conf['silo_id']
+            int(conf['silo_id'])
             filtered_data = {}
             for form_key in row['form'].keys():
                 if form_key in exclude_tags or form_key[:1] in exclude_chars:
                     continue
                 filtered_data[form_key] = row['form'][form_key]
                 filtered_data['submission_id'] = row['id']
-
+            flattened_data = flatten(filtered_data)
             # Each row could be a different form/silo. So we'll be storing
             # a dict of sets instead of a set.
             try:
-                data_columns[conf['silo_id']].update(filtered_data.keys())
+                data_columns[conf['silo_id']].update(flattened_data.keys())
             except KeyError:
-                data_columns[conf['silo_id']] = set(filtered_data.keys())
-            storeCommCareData(conf, [filtered_data])
+                data_columns[conf['silo_id']] = set(flattened_data.keys())
+            storeCommCareData(conf, [flattened_data])
 
         # Sets don't serialize, need to convert to lists.
         for key in data_columns:
@@ -256,8 +264,9 @@ def parseCommCareFormData(conf, data):
                     continue
                 filtered_row[form_key] = row['form'][form_key]
             filtered_row['submission_id'] = row['id']
-            data_properties.append(filtered_row)
-            data_columns.update(filtered_row.keys())
+            flattened_row = flatten(filtered_row)
+            data_properties.append(flattened_row)
+            data_columns.update(flattened_row.keys())
         storeCommCareData(conf, data_properties)
         return list(data_columns)
 

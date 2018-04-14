@@ -1,5 +1,6 @@
 import json
 import requests
+import collections
 from operator import itemgetter
 
 from pymongo import MongoClient
@@ -7,7 +8,6 @@ from pymongo import MongoClient
 from django.contrib import messages
 from django.conf import settings
 
-from .tasks import fetchCommCareData
 from tola.util import addColsToSilo
 from silo.models import Read, ThirdPartyTokens, Silo
 from commcare.models import CommCareCache
@@ -81,42 +81,17 @@ def copy_from_cache(cache_silo, silo, read):
     silo.save()
 
 
-def getCommCareDataHelper(conf):
-    """
-    Use fetch and request CommCareData to store all of the case data
+def flatten(data, parent_key='', sep='-'):
+    items = []
+    for k, v in data.items():
+        new_key = parent_key + sep + k if parent_key else k
+        if isinstance(v, collections.MutableMapping):
+            items.extend(flatten(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
-    domain -- the domain name used for a commcare project
-    auth -- the authorization required
-    auth_header -- True = use Header, False = use Digest authorization
-    total_cases -- total cases to get
-    silo - silo to put the data into
-    read -- read that the data is apart of
-    """
 
-    # CommCare has a max limit of 50 for report downloads
-    if conf.download_type == 'commcare_report':
-        record_limit = 50
-    else:
-        record_limit = 100
-
-    # replace the record limit and fetch the data
-    base_url = conf.base_url.replace('limit=1', 'limit=' + str(record_limit))
-    if conf.download_type == 'commcare_form':
-        cache_obj = CommCareCache.objects.get(form_id=conf.form_id)
-        base_url += '&received_on_start=' + \
-            cache_obj.last_updated.isoformat()[:-6]
-    data_raw = fetchCommCareData(conf.to_dict(), base_url, 0, record_limit)
-    data_collects = data_raw.apply_async()
-    data_retrieval = [v.get() for v in data_collects]
-    columns = set()
-    for data in data_retrieval:
-        columns = columns.union(data)
-
-    # Add new columns to the list of current columns this is slower because
-    # Order has to be maintained (2n instead of n)
-    silo = Silo.objects.get(pk=conf.silo_id)
-    addColsToSilo(silo, columns)
-    return (messages.SUCCESS, "CommCare data imported successfully", columns)
 
 
 class CommCareImportConfig(object):
