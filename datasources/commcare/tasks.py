@@ -33,13 +33,13 @@ def fetchCommCareData(conf, url, start, step):
     start -- What record to start at
     step -- # of records to get in one request
     """
-    # return group(requestCommCareData.s(
-    #     conf, url, offset, 0) for offset in xrange(
-    #         start, conf['record_count'], step))
-
     return group(requestCommCareData.s(
         conf, url, offset, 0) for offset in xrange(
-            start, 3000, step))
+            start, conf['record_count'], step))
+
+    # return group(requestCommCareData.s(
+    #     conf, url, offset, 0) for offset in xrange(
+    #         start, 1000, step))
 
 
 @shared_task(trail=True)
@@ -141,11 +141,10 @@ def parseCommCareFormData(conf, data):
             # create an entry for the current form
             try:
                 cache_obj = CommCareCache.objects.get(form_id=form_id)
+                conf['form_id'] = cache_obj.form_id
+                conf['form_name'] = cache_obj.form_name
                 conf['silo_id'] = cache_obj.silo_id
                 conf['read_id'] = cache_obj.read_id
-                conf['form_name'] = cache_obj.form_name
-                conf['form_id'] = cache_obj.form_id
-                # print 'found existing cache with silo ', conf['silo_id']
             except CommCareCache.DoesNotExist:
                 created = False
                 conf['form_id'] = form_id
@@ -160,7 +159,6 @@ def parseCommCareFormData(conf, data):
                     description=silo_name,
                     read_url=conf['base_url'],
                     resource_id=conf['form_id'])
-
                 silo = Silo.objects.create(
                     name=silo_name[:60], public=0, owner=user)
                 silo.reads.add(read)
@@ -169,32 +167,22 @@ def parseCommCareFormData(conf, data):
                 # where a different celery worker has created the cache
                 # between the exists-check and the creation step in this
                 # worker.
-                print 'No cache found for %s, ready to try creating with silo %s' % (conf['form_name'], conf['silo_id'])
-                try:
-                    cache_obj, created = CommCareCache.objects.get_or_create(
-                        project=conf['project'],
-                        form_id=conf['form_id'],
-                        defaults={
-                            'form_name': conf['form_name'],
-                            'app_id': '',
-                            'app_name': '',
-                            'silo': silo,
-                            'read': read,
-                            'last_updated': default_date})
-                    print 'after create created value and cacheobj', created, cache_obj.silo.id
-                except IntegrityError:
-                    cache_obj = CommCareCache.objects.get(form_id=form_id)
-                    conf['silo_id'] = cache_obj.silo_id
-                    conf['read_id'] = cache_obj.read_id
-                    conf['form_name'] = cache_obj.form_name
-                    conf['form_id'] = cache_obj.form_id
-                    print 'Ninjad!.  Cached silo id is ', conf['silo_id']
-                    print 'Collision avoided for form id ', form_id
-                print 'created_value', created
+                cache_obj, created = CommCareCache.objects.get_or_create(
+                    project=conf['project'],
+                    form_id=conf['form_id'],
+                    defaults={
+                        'form_name': conf['form_name'],
+                        'app_id': '',
+                        'app_name': '',
+                        'silo': silo,
+                        'read': read,
+                        'last_updated': default_date})
+
+                # If the cache object was created, we now have to populate
+                # the rest of the fields with the relevant data.
                 if created:
                     conf['silo_id'] = silo.id
                     conf['read_id'] = read.id
-                    print 'created with silo_id ', conf['silo_id']
                     # Save the xmlns id of the form, can be used for downloading
                     # form-specific data.
                     cache_obj.xmlns = row['form']['@xmlns']
@@ -222,16 +210,19 @@ def parseCommCareFormData(conf, data):
                         cache_obj.app_name = ''
 
                     cache_obj.save()
-                # Need to delete the silo and read that were never used to
-                # create a cache entry.
+                # If the silo was not created, it means another celery
+                # process ninja'd the cache creation process (i.e. there's a
+                # race condition) and the new silo and read should be deleted,
+                # since they aren't being used after all.
                 else:
-                    silo.delete()
                     read.delete()
+                    silo.delete()
+                    print 'Smooth run through a race condition'
+
 
             # Filter out the stuff that isn't data from the returned JSON
             # (CommCare doesn't provide a clean data object, the form
             # data is mixed in with other metadata, all in the same object)
-            print 'final silo id ', conf['silo_id']
             int(conf['silo_id'])
             filtered_data = {}
             for form_key in row['form'].keys():
@@ -251,7 +242,7 @@ def parseCommCareFormData(conf, data):
         # Sets don't serialize, need to convert to lists.
         for key in data_columns:
             data_columns[key] = list(data_columns[key])
-
+        print 'maxddate', max_date
         return (data_columns, max_date)
     # This handles regular user request, not a cache building request.
     else:

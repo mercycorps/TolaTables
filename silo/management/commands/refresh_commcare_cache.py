@@ -116,10 +116,6 @@ class Command(BaseCommand):
                             print 'Column dict', column_dict
                             print 'Error message: ', e
 
-
-
-
-
                 save_date = max(
                     parse(max_date).replace(tzinfo=pytz.UTC), save_date)
 

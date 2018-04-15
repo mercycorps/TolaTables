@@ -989,36 +989,39 @@ def updateSiloData(request, pk):
             msgs = []
             sources_to_delete = []
 
-            #Get data from each of the reads and store it as the appropriate array
+            # Get data from each of the reads and store it as the appropriate array,
+            # unless it's CommCare, in which case importDataFromRead and the celery
+            # tasks perform those functions.
             for read in reads:
-                import_response = importDataFromRead(request,silo,read)
-                if import_response[2]:
-                    msgs.append(import_response[2])
-                if import_response[1] == 1:
-                    data[1].append(import_response[0])
-                    data[0].append(read)
-                    sources_to_delete.append(read.id)
+                if read.type.read_type != 'CommCare':
+
+                    # Check if the user still has access to the commcare api and import
+                    # the data if they do.
+                    conf = CommCareImportConfig(tables_user_id=request.user.id)
+                    conf.set_auth_header()
+                    response = requests.get(read.read_url, headers=conf.auth_header, timeout=3)
+                    if response.status_code != 200:
+                        msgs.append(
+                            messages.ERROR,
+                            "There was either an error fetching the CommCare data, or you no longer have access")
+                    else:
+                        import_response = importDataFromRead(request,silo,read)
+                        if import_response[2]:
+                            msgs.append(import_response[2])
+
+                else:
+                    import_response = importDataFromRead(request,silo,read)
+                    if import_response[2]:
+                        msgs.append(import_response[2])
+                    if import_response[1] == 1:
+                        data[1].append(import_response[0])
+                        data[0].append(read)
+                        sources_to_delete.append(read.id)
 
 
             #from ones where we got data delete those records
             unique_field_exist = silo.unique_fields.exists()
             #Unique field means keep the data and update as necessary (which is already implimented so its not necessary to delete anything)
-
-            # Save new records and delete old ones unless it's CommCare. In that
-            # case, those functions are handled within the celery tasks.
-            if read.type.read_type != 'CommCare':
-                if  unique_field_exist == False:
-                    lvs = LabelValueStore.objects(
-                        silo_id=silo.pk,
-                        __raw__={"read_id" : {
-                            "$exists" : "true", "$in" : sources_to_delete
-                        }}
-                    )
-                    lvs.delete()
-
-                for x in range(0,len(data[0])):
-                    for entry in data[1][x]:
-                        saveDataToSilo(silo, entry, data[0][x], request.user)
 
             for read in reads:
                 if read.type.read_type == "GSheet Import":

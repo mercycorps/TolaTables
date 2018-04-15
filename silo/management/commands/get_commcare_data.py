@@ -8,6 +8,7 @@ from django.contrib.auth.models import User
 from silo.models import LabelValueStore, Read, Silo, ThirdPartyTokens, ReadType
 from tola.util import getNewestDataDate, cleanKey, addColsToSilo
 
+from commcare.models import CommCareCache
 from commcare.tasks import fetchCommCareData
 from commcare.util import get_commcare_record_count, CommCareImportConfig
 
@@ -56,17 +57,29 @@ class Command(BaseCommand):
                     conf.project = url_parts[4]
                     conf.report_id = url_parts[8]
                     conf.record_count = get_commcare_record_count(conf)
+                elif '/form/' in conf.base_url:
+                    cache_obj = CommCareCache.objects.get(form_id=read.resource_id)
+                    conf.download_type = 'commcare_form'
+                    conf.project = cache_obj.project
+                    conf.form_name= cache_obj.form_name
+                    conf.form_id = cache_obj.form_id
+                    conf.base_url = read.read_url + '&received_on_start=' + cache_obj.last_updated.isoformat()[:-6]
+                    conf.record_count = get_commcare_record_count(conf)
 
                 if conf.record_count == 0:
                     self.stdout.write('No new commcare data for READ_ID, "%s"' % read.pk)
                     continue
 
+                print 'conf = ', conf
                 response = requests.get(conf.base_url, headers=conf.auth_header)
                 if response.status_code == 401:
                     commcare_token.delete()
                     self.stdout.write('Incorrect commcare api key for silo %s, read %s' % (silo.pk, read.pk))
+                    continue
                 elif response.status_code != 200:
                     self.stdout.write('Failure retrieving commcare data for silo %s, read %s' % (silo.pk, read.pk))
+                    continue
+                print 'responsecontent', response.content
 
                 #Now call the update data function in commcare tasks
                 conf.base_url = read.read_url

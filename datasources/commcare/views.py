@@ -146,13 +146,43 @@ def getCommCareData(request):
 
         if form.is_valid():
 
+            base_url = 'https://www.commcarehq.org/a/%s/api/v0.5/%s/'
+
+            #See if this person has access to the data they are requesting
+            ping_url = base_url % (conf.project, 'form') + '?limit=1'
+            try:
+                results = requests.get(ping_url, headers=conf.auth_header, timeout=5)
+            except requests.exceptions.ReadTimeout:
+                print 'Request timed out'
+                messages.add_message(
+                    request, messages.ERROR,
+                    "The CommCare server is not responding or you do not have access to the %s project" \
+                        % conf.project)
+                return render(request, 'getcommcareforms.html', {'form': form, 'auth': 'authenticated'})
+            if results.status_code != 200:
+                conf.auth_header.replace('304b406', '304b4zz')
+                print 'statuscodecheck ', results.status_code
+                messages.add_message(
+                    request, messages.ERROR,
+                    "The CommCare server is not responding or you do not have access to the %s project" \
+                        % conf.project)
+                return render(
+                    request,
+                    'getcommcareforms.html',
+                    {'form': form, 'auth': 'authenticated'})
+
+
+
+
             if conf.report_id != 'default':
                 report_name = report_map[conf.report_id]
             else:
                 report_name = None
 
             conf.download_type = request.POST['download_type']
-            base_url = 'https://www.commcarehq.org/a/%s/api/v0.5/%s/'
+
+
+
 
             # Set url and get size of dataset.  KeyError will be thrown by
             # get_commcare_record_count when CommCare API isn't working
@@ -227,6 +257,10 @@ def getCommCareData(request):
                 copy_from_cache(cache_silo, silo, read)
                 conf.update = True
 
+            if conf.record_count == 0:
+                return HttpResponseRedirect(reverse_lazy(
+                    "siloDetail", kwargs={'silo_id': silo.id}))
+                    
             # Retrieve and save the data.
             # TODO: catch retrieval failures
             ret = getCommCareDataHelper(conf)

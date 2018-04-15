@@ -51,7 +51,7 @@ def get_commcare_form_ids(conf):
     return form_tuples
 
 
-# Rectrieve record counts for commcare download.
+# Retrieve record counts for commcare download.
 def get_commcare_record_count(conf):
     # If 'configurablereportdata' is in the url, reports are being downloaded
     if 'configurablereportdata' in conf.base_url:
