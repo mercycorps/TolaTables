@@ -1003,7 +1003,7 @@ def updateSiloData(request, pk):
                     if response.status_code != 200:
                         msgs.append(
                             messages.ERROR,
-                            "There was either an error fetching the CommCare data, or you no longer have access")
+                            "There was either an error fetching the CommCare data, or you no longer have access to this dataset.")
                     else:
                         import_response = importDataFromRead(request,silo,read)
                         if import_response[2]:

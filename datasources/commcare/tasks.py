@@ -152,12 +152,13 @@ def parseCommCareFormData(conf, data):
                 user = User.objects.get(pk=conf['tables_user_id'])
                 silo_name = "SAVE-Cache-%s-%s" % (
                     conf['project'], conf['form_name'])
+                cache_url = re.sub('&received_on.*', '', conf['base_url'])
                 read = Read.objects.create(
                     owner=user,
                     type=ReadType.objects.get(read_type='CommCare'),
                     read_name=silo_name[:100],
                     description=silo_name,
-                    read_url=conf['base_url'],
+                    read_url=cache_url,
                     resource_id=conf['form_id'])
                 silo = Silo.objects.create(
                     name=silo_name[:60], public=0, owner=user)
@@ -242,7 +243,6 @@ def parseCommCareFormData(conf, data):
         # Sets don't serialize, need to convert to lists.
         for key in data_columns:
             data_columns[key] = list(data_columns[key])
-        print 'maxddate', max_date
         return (data_columns, max_date)
     # This handles regular user request, not a cache building request.
     else:
