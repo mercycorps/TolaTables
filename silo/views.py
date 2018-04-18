@@ -993,7 +993,7 @@ def updateSiloData(request, pk):
             # unless it's CommCare, in which case importDataFromRead and the celery
             # tasks perform those functions.
             for read in reads:
-                if read.type.read_type != 'CommCare':
+                if read.type.read_type == 'CommCare':
 
                     # Check if the user still has access to the commcare api and import
                     # the data if they do.

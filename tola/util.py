@@ -201,7 +201,8 @@ def cleanDataObj(obj, silo):
 def cleanKey(key):
     if key == "" or key is None or key == "silo_id":
         return key
-    elif key == "id" or key == "_id": key = "user_assigned_id"
+    elif key == "id": key = "user_assigned_id"
+    elif key == "_id": key = "sys_id"
     elif key == "edit_date": key = "editted_date"
     elif key == "create_date": key = "created_date"
     key = ' '.join(key.split())

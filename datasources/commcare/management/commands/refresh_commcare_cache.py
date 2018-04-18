@@ -24,7 +24,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
 
-        disabled_projects = ['prospectsmonitoring']
+        disabled_projects = []
         # Get a list of projects to import data from
         if options['project']:
             project = [options['project']]
