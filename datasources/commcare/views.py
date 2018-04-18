@@ -260,7 +260,7 @@ def getCommCareData(request):
             if conf.record_count == 0:
                 return HttpResponseRedirect(reverse_lazy(
                     "siloDetail", kwargs={'silo_id': silo.id}))
-                    
+
             # Retrieve and save the data.
             # TODO: catch retrieval failures
             ret = getCommCareDataHelper(conf)
