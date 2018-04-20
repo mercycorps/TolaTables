@@ -545,7 +545,7 @@ def export_to_gsheet(request, id):
 
     msgs = export_to_gsheet_helper(request.user, spreadsheet_id, id, query, cols_to_export)
 
-    google_auth_redirect = "export_to_gsheet/%s/" % id
+    google_auth_redirect = "/export_to_gsheet/%s/" % id
 
     for msg in msgs:
         if "silo_id" in msg.keys(): id = msg.get("silo_id")

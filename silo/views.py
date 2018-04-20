@@ -1108,7 +1108,7 @@ def importDataFromRead(request, silo, read):
             conf.form_id = cache_obj.form_id
             conf.record_count = get_commcare_record_count(conf)
 
-            db.label_value_store.delete_many({'silo_id': silo.id})
+            db.label_value_store.delete_many({'read_id': read.id})
             cache_silo = Silo.objects.get(pk=cache_obj.silo.id)
             copy_from_cache(cache_silo, silo, read)
 

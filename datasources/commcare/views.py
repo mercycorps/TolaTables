@@ -171,18 +171,20 @@ def getCommCareData(request):
                     'getcommcareforms.html',
                     {'form': form, 'auth': 'authenticated'})
 
-
-
-
-            if conf.report_id != 'default':
-                report_name = report_map[conf.report_id]
-            else:
+            # This try block catches issues with report_map triggering
+            # an UnboundLocalError in the case when someone hits the back
+            # button following a server error.  It's a difficult situation to
+            # reproduce.  Unit tests might help in developing a handle more
+            # elegant solution.
+            try:
+                if conf.report_id != 'default':
+                    report_name = report_map[conf.report_id]
+                else:
+                    report_name = None
+            except UnboundLocalError:
                 report_name = None
 
             conf.download_type = request.POST['download_type']
-
-
-
 
             # Set url and get size of dataset.  KeyError will be thrown by
             # get_commcare_record_count when CommCare API isn't working

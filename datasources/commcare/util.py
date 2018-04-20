@@ -77,8 +77,12 @@ def copy_from_cache(cache_silo, silo, read):
         record['read_id'] = read.id
         db.label_value_store.insert(record)
 
-    silo.columns = cache_silo.columns
-    silo.save()
+    cols = []
+    col_types = {}
+    for col in json.loads(cache_silo.columns):
+        cols.append(col['name'])
+        col_types[col['name']] = col['type']
+    addColsToSilo(silo, cols, col_types)
 
 
 def flatten(data, parent_key='', sep='-'):
