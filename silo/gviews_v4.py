@@ -448,7 +448,7 @@ def export_to_gsheet_helper(user, spreadsheet_id, silo_id, query, headers):
             headers = []
             rows.append({"values": \
                             [{ \
-                            "userEnteredValue": {"stringValue": "From row %i" % j}, \
+                            "userEnteredValue": {"stringValue": "From row %s" % str(j+2)}, \
                             'userEnteredFormat': {'backgroundColor': {'red':0.75,'green':0.75, 'blue': 0.75}}
                             }]\
             })
@@ -457,9 +457,12 @@ def export_to_gsheet_helper(user, spreadsheet_id, silo_id, query, headers):
                 for index, col in enumerate(row):
                     if col not in headers:
                         headers.append(col)
-                    values.append({"userEnteredValue": { \
-                                        "stringValue": smart_text(row[headers[index]])} \
-                                })
+                    try:
+                        values.append({"userEnteredValue": {
+                            "stringValue": smart_text(row[headers[index]])}
+                        })
+                    except KeyError:
+                        values.append({"userEnteredValue": {"stringValue": 'null'}})
                 rows.append({"values": values})
 
 

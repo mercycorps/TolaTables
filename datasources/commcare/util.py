@@ -91,6 +91,12 @@ def flatten(data, parent_key='', sep='-'):
         new_key = parent_key + sep + k if parent_key else k
         if isinstance(v, collections.MutableMapping):
             items.extend(flatten(v, new_key, sep=sep).items())
+        elif isinstance(v, list) and isinstance(v[0], collections.MutableMapping):
+            flat_list = []
+            for list_item in v:
+                h = flatten(list_item, parent_key=new_key)
+                flat_list.append(h)
+            items.append((new_key, flat_list))
         else:
             items.append((new_key, v))
     return dict(items)
