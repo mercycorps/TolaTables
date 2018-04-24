@@ -159,8 +159,6 @@ def getCommCareData(request):
                         % conf.project)
                 return render(request, 'getcommcareforms.html', {'form': form, 'auth': 'authenticated'})
             if results.status_code != 200:
-                conf.auth_header.replace('304b406', '304b4zz')
-                print 'statuscodecheck ', results.status_code
                 messages.add_message(
                     request, messages.ERROR,
                     "The CommCare server is not responding or you do not have access to the %s project" \
