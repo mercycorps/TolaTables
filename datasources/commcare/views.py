@@ -113,7 +113,6 @@ def getCommCareData(request):
         silo_choices.append((silo.pk, silo.name))
 
     if request.method == 'POST':
-
         # Update the config object with form selections
         conf.silo_id = int(request.POST.get("silo", None))
         if conf.silo_id in [-1, 0]:

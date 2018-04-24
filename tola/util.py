@@ -206,7 +206,8 @@ def cleanKey(key):
     elif key == "edit_date": key = "editted_date"
     elif key == "create_date": key = "created_date"
     key = ' '.join(key.split())
-    key = key.replace(".", "_").replace("$", "USD")
+    key = key.replace('.', '_').replace('$', 'USD').replace('\n', '') \
+        .replace('\r', '')
     try:
         key = key.replace(u'\u2026', "")
     except UnicodeDecodeError:
