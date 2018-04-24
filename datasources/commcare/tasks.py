@@ -216,6 +216,8 @@ def parseCommCareFormData(conf, data):
                 # race condition) and the new silo and read should be deleted,
                 # since they aren't being used after all.
                 else:
+                    conf['silo_id'] = cache_obj.silo_id
+                    conf['read_id'] = cache_obj.read_id
                     read.delete()
                     silo.delete()
                     print 'Smooth run through a race condition'
