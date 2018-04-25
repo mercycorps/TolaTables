@@ -410,8 +410,13 @@
 
                                 }
                                 else{
-                                  //for any other kind of object
-                                  return Object.values(data);
+                                    //for any other kind of object
+                                    // return Object.values(data);
+                                    temp = ''
+                                    $.each(data, function (k, v){
+                                        temp += k + ': ' + v + '<br/>'
+                                    })
+                                    return temp
                                 }
                             } else {
                               if (data == undefined) {
@@ -516,6 +521,8 @@
                             }
                         });
                     });
+                    column_names.sort()
+
                     // Now use the column names to populate the repeats_table's header row
                     $.each(column_names, function(i, col){
                         col = col.split("/");
@@ -528,10 +535,14 @@
                         repeats_table += "<tr>";
                         //for an array of objects
                         if (jQuery.type(row) == "object"){
-                           $.each(row, function(c, v){
+                            column_names.forEach(function(key) {
+                                v = 'null'
+                                if (key in row) {
+                                    v = row[key]
+                                }
                                 repeats_table += "<td>" + v + "</td>";
                                 //console.log("c: " + c + " v: " + v);
-                           });
+                            });
                         }
                         //for an array of values
                         if(jQuery.type(row) == "number"|| jQuery.type(row) == "symbol" || jQuery.type(row) == "string" || jQuery.type(row) == "date"){

@@ -154,15 +154,18 @@ def saveDataToSilo(silo, data, read=-1, user=None):
             lvs.read_id = read_source_id
 
         counter = 0
-        # set the fields in the curernt document and save it
+        # set the fields in the current document and save it
 
         row = cleanDataObj(row, silo)
-
         for key, val in row.iteritems():
             if not isinstance(key, tuple):
                 if key not in keys:
                     keys.append(key)
-                setattr(lvs, key, val)
+                try:
+                    val = val.encode('utf-8')
+                except:
+                    pass
+                setattr(lvs, key.encode('utf-8'), val)
 
         counter += 1
         lvs = calculateFormulaCell(lvs,silo)
@@ -198,11 +201,13 @@ def cleanDataObj(obj, silo):
 def cleanKey(key):
     if key == "" or key is None or key == "silo_id":
         return key
-    elif key == "id" or key == "_id": key = "user_assigned_id"
+    elif key == "id": key = "user_assigned_id"
+    elif key == "_id": key = "sys_id"
     elif key == "edit_date": key = "editted_date"
     elif key == "create_date": key = "created_date"
     key = ' '.join(key.split())
-    key = key.replace(".", "_").replace("$", "USD")
+    key = key.replace('.', '_').replace('$', 'USD').replace('\n', '') \
+        .replace('\r', '')
     try:
         key = key.replace(u'\u2026', "")
     except UnicodeDecodeError:

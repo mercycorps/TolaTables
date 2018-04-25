@@ -148,7 +148,9 @@ class SiloViewSet(viewsets.ReadOnlyModelViewSet):
             #pagination.PageNumberPagination.page_size = 200
             return Silo.objects.all()
 
-        return Silo.objects.filter(Q(owner=user) | Q(public=True) | Q(shared=self.request.user))
+        return Silo.objects.filter(
+            Q(owner=user) | Q(public=True) | Q(shared=self.request.user)
+            ).distinct()
 
 
     @detail_route()

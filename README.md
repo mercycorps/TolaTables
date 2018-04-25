@@ -90,6 +90,15 @@ MongoDB uses `/data/db` as the default directory for its database files and if y
 If your using more then one settings file change manage.py to point to local or dev file.  Then run
 `python manage.py runserver`
 
+
+## Upgrading Tola on the server
+
+Because Tola Tables relies on several different types of services (with multiple options for each type),
+upgrading Tola Tables on the server can be a multi-step process. Upgrade procedures for a common deployment configuration can be found below.
+
+[Nginx webserver, Celery task queue, RabbitMQ message broker](docs/upgrade.rst)
+
+
 ## Using Tola
 If you use your browser to navigate to `localhost:8000`, you should now find a Tola login screen.
 

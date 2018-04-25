@@ -60,10 +60,21 @@
                 + '</div>'
             );
 
+            //Create the div that displays the CommCare form lookup error message.
+            //It's inside a hidden div so it won't appear on load.
+            $("#div_id_commcare_form_name > div.controls").append(
+                '<div id="div_error_id_forms_not_found" class="has-error col-sm-8" style="padding-left:0px">'
+                    + '<span style="margin-top:7px" id="error_id_reports_not_found" class="help-block">'
+                    + '<strong>Forms not found.  Please check the project name.  If you are sure '
+                    + 'it is correct, please wait one minute and refresh the page to try again.</strong>'
+                    + '</span>'
+                + '</div>'
+            );
+
 
             // If the form is returned with errors, make sure the appropriate
             // text input boxes are displayed.
-            updateReportDropdown()
+            updateDropdowns()
 
             if ($("#id_silo").val() == -1) {
                 $("#div_id_new_table_name").show();
@@ -94,38 +105,47 @@
 
             // Once the project has been specified (or if it's part of the
             // querystring because the user just provided their API key),
-            // we can retrieve the list of reports from CommCare.
+            // we can retrieve the list of reports from CommCare and a list of
+            // form options from the database.
             // Doing it here rather than on radio button avoids doing an api
-            // call on each radio select.  Need to make sure we're not
-            // displaying the auth form.
-            base_url = '/commcare/report_names/?project=';
+            // call on each radio select.
+            var base_url_reports = '/commcare/report_names/?project=';
+            var base_url_forms = '/commcare/form_names/?project=';
 
             $('input[id="id_project"]').on("change", function() {
+                // Need to make sure we're not displaying the auth form.
                 if (document.getElementById("commcare-import-form")) {
-                    url = base_url + $('#' + this.id).val();
+                    var projectName = $('#' + this.id).val()
+                    url = base_url_reports + projectName;
                     getReportNames(url);
+                    url = base_url_forms + projectName;
+                    getCommCareFormNames(url);
                 }
             });
 
+            // Populate the report and form names if it's a fresh login and
+            // we have the project name as part of the URL
             programMatch = window.location.href.match(/project=([^\&]+)/);
             if (programMatch) {
-                url = base_url + programMatch[1];
+                url = base_url_reports + programMatch[1];
                 getReportNames(url);
+                url = base_url_forms + programMatch[1];
+                getCommCareFormNames(url);
             }
 
             // Reveal the appropriate input field; depends on the download type
             // selected by the user.
-            $("input[type=radio][name=download_type]").on("change", updateReportDropdown);
+            $("input[type=radio][name=download_type]").on("change", updateDropdowns);
 
         });
 
-        var updateReportDropdown = function() {
+        var updateDropdowns = function() {
             if (document.getElementById('id_download_type_1').checked){
                 $("#div_id_commcare_report_name").show();
                 $("#div_id_commcare_form_name").hide();
                 $("#id_commcare_report_name").focus();
 
-                // More than one select option indicateds that fetech the list
+                // More than one select option indicateds that fetching the list
                 // of reports was successful.  Show/hide appropriate inputs
                 // based on this success.
                 if ( $("#id_commcare_report_name option").length > 1 ) {
@@ -139,11 +159,24 @@
                 }
             }
 
-            // else if (document.getElementById('id_download_type_2').checked) {
-            //     $("#div_id_commcare_form_name").show();
-            //     $("#div_id_commcare_report_name").hide();
-            //     $("#id_commcare_form_name").focus();
-            // }
+            else if (document.getElementById('id_download_type_2').checked){
+                $("#div_id_commcare_report_name").hide();
+                $("#div_id_commcare_form_name").show();
+                $("#id_commcare_form_name").focus();
+
+                // More than one select option indicates that fetching the list
+                // of forms was successful. Show/hide appropriate inputs
+                // based on this success.
+                if ( $("#id_commcare_form_name option").length > 1 ) {
+                    $("#div_error_id_forms_not_found").hide();
+                    $("#id_commcare_form_name").show();
+                }
+                else {
+                    $("#id_commcare_form_name").hide();
+                    $("#div_error_id_forms_not_found").show();
+                    $("#error_1_id_commcare_form_name").hide();
+                }
+            }
 
             else {
                 $("#div_id_commcare_report_name").hide();
@@ -168,7 +201,27 @@
                         });
                         $('#id_commcare_report_name').html(options.join('\n'));
                     };
-                    updateReportDropdown();
+                    updateDropdowns();
+                }
+            });
+        };
+
+        // Get a list of cached report names from the database
+        var getCommCareFormNames = function(url){
+            $.ajax({
+                url: url,
+                type: "GET",
+                // headers: headers,
+                dataType: "JSON",
+                complete: function(data, status) {
+                    if (status == "success") {
+                        var options = ['<option value=default>Select a Form</option>'];
+                        data.responseJSON.forEach( function(namePair) {
+                            options.push('<option value=' + namePair[0] + '>' + namePair[1] + '</option>');
+                        });
+                        $('#id_commcare_form_name').html(options.join('\n'));
+                    };
+                    updateDropdowns();
                 }
             });
         };

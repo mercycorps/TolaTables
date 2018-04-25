@@ -261,10 +261,15 @@ body > .container {
 
 /* Commcare Import Form */
 
-/* Start hidden, unhide of they indicate they are importing forms */
+/* Start hidden, JS will unhide if they indicate they are importing forms */
 #div_id_commcare_form_name,
 #div_id_commcare_report_name,
 #div_id_new_table_name
  {
   display: none;
+}
+
+/* Enable scrollbars on repeat modal display */
+#repeats_modal_body {
+    overflow: scroll;
 }
