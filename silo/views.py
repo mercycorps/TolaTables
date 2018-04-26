@@ -1022,6 +1022,16 @@ def updateSiloData(request, pk):
             #from ones where we got data delete those records
             unique_field_exist = silo.unique_fields.exists()
             #Unique field means keep the data and update as necessary (which is already implimented so its not necessary to delete anything)
+            # Save new records and delete old ones unless it's CommCare. In that
+            # case, those functions are handled within the celery tasks.
+            if read.type.read_type != 'CommCare':
+                if  unique_field_exist == False:
+                    lvs = LabelValueStore.objects(silo_id=silo.pk,__raw__={"read_id" : { "$exists" : "true", "$in" : sources_to_delete }})
+                    lvs.delete()
+
+                for x in range(0,len(data[0])):
+                    for entry in data[1][x]:
+                        saveDataToSilo(silo,entry,data[0][x],request.user)
 
             for read in reads:
                 if read.type.read_type == "GSheet Import":
