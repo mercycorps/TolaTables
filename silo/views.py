@@ -823,6 +823,12 @@ def getJSON(request):
 #display
 
 
+def shutdown(request):
+    if request.user.is_staff:
+        return render(request, 'index.html')
+    return render(request, 'shutdown.html')
+
+
 #INDEX
 def index(request):
     #if request.COOKIES.get('auth_token', None):

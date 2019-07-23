@@ -48,7 +48,16 @@ router.register(r'workflowlevel1', WorkflowLevel1ViewSet)
 router.register(r'workflowlevel2', WorkflowLevel2ViewSet)
 
 urlpatterns =[
+    # Auth backend URL's
+
+    url('', include('social_django.urls', namespace='social')),
+    url(r'^$', views.shutdown, name='index'),
+
+    url('', include('django.contrib.auth.urls', namespace='auth')),
+    url(r'^accounts/login/$', auth.views.login, name='login'),
+
     url(r'^api/', include(router.urls)),
+
     url(r'^api-auth/', include('rest_framework.urls', namespace='rest_framework')),
     url(r'^api/docs/', tola_views.schema_view),
 
@@ -105,7 +114,7 @@ urlpatterns =[
     url(r'^import_gsheet/(?P<id>\d+)/$', gviews_v4.import_from_gsheet, name='import_gsheet'),
     url(r'^get_sheets_from_google_spredsheet/$', gviews_v4.get_sheets_from_google_spredsheet, name='get_sheets'),
 
-    url(r'^accounts/login/$', auth.views.login, name='login'),
+
     url(r'^accounts/logout/$', tola_views.logout_view, name='logout'),
 
     url(r'^accounts/profile/$', tola_views.profile, name='profile'),
@@ -113,9 +122,8 @@ urlpatterns =[
 
     url(r'^renew_auto/(?P<read_pk>\d+)/(?P<operation>(pull|push))/$', views.renewAutoJobs, name='renewsAutoJobs'),
 
-    # Auth backend URL's
-    url('', include('django.contrib.auth.urls', namespace='auth')),
-    url('', include('social_django.urls', namespace='social')),
+
+
 
     # reports and dashboards
     url(r'^reports/', include('reports.urls')),
