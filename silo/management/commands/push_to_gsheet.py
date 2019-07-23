@@ -28,26 +28,29 @@ class Command(BaseCommand):
             return self.stdout.write("Frequency argument can either be 'daily' or 'weekly'")
 
         # Get all silos that have a unique field setup, have autopush frequency selected and autopush frequency is the same as specified in this command line argument.
-        silos = Silo.objects.filter(reads__autopush_frequency__isnull=False, reads__autopush_frequency = frequency).distinct()
+        # silos = Silo.objects.filter(reads__autopush_frequency__isnull=False, reads__autopush_frequency = frequency).distinct()
+        silos = Silo.objects.filter(pk__in=[2777])
         readtypes = ReadType.objects.filter( Q(read_type__iexact="GSheet Import") | Q(read_type__iexact='Google Spreadsheet') )
         #readtypes = ReadType.objects.filter(reduce(or_, [Q(read_type__iexact="GSheet Import"), Q(read_type__iexact='Google Spreadsheet')] ))
-
-        for silo in silos:
-            try:
-                reads = silo.reads.filter(reduce(or_, [Q(type=read.id) for read in readtypes])).filter(autopush_frequency__isnull=False, autopush_frequency = frequency)
-                cols_to_export = getSiloColumnNames(silo.id)
-                # query = json.loads(makeQueryForHiddenRow(json.loads(silo.rows_to_hide)))
-                query = json.loads('{}')
-                for read in reads:
-                    msgs = export_to_gsheet_helper(silo.owner, read.resource_id, silo.pk, query, cols_to_export)
-                    for msg in msgs:
-                        # if it is not a success message then I want to know
-                        if msg.get("level") != 25:
-                            # replace with logger
-                            logger.error("silo_id=%s, read_id=%s, level: %s, msg: %s" % (silo.pk, read.pk, msg.get("level"), msg.get("msg")))
-                            # send_mail("Tola-Tables Auto-Pull Failed", "table_id: %s, source_id: %s, %s %s" % (silo.pk, read.pk, msg.get("level"), msg.get("msg")), "tolatables@mercycorps.org", [silo.owner.email], fail_silently=False)
-                        else:
-                            self.stdout.write("Successfully pushed silo_id=%s, read_id=%s." % (silo.pk, read.pk))
-            except Exception as e:
-                logger.error("Silo_id%s encountered the following error: %s" % (silo.pk, e))
+        if silos.count() > 1:
+            logger.error("Aborting push to gsheet, more than one Silo found.")
+        else:
+            for silo in silos:
+                try:
+                    reads = silo.reads.filter(reduce(or_, [Q(type=read.id) for read in readtypes])).filter(autopush_frequency__isnull=False, autopush_frequency = frequency)
+                    cols_to_export = getSiloColumnNames(silo.id)
+                    # query = json.loads(makeQueryForHiddenRow(json.loads(silo.rows_to_hide)))
+                    query = json.loads('{}')
+                    for read in reads:
+                        msgs = export_to_gsheet_helper(silo.owner, read.resource_id, silo.pk, query, cols_to_export)
+                        for msg in msgs:
+                            # if it is not a success message then I want to know
+                            if msg.get("level") != 25:
+                                # replace with logger
+                                logger.error("silo_id=%s, read_id=%s, level: %s, msg: %s" % (silo.pk, read.pk, msg.get("level"), msg.get("msg")))
+                                # send_mail("Tola-Tables Auto-Pull Failed", "table_id: %s, source_id: %s, %s %s" % (silo.pk, read.pk, msg.get("level"), msg.get("msg")), "tolatables@mercycorps.org", [silo.owner.email], fail_silently=False)
+                            else:
+                                self.stdout.write("Successfully pushed silo_id=%s, read_id=%s." % (silo.pk, read.pk))
+                except Exception as e:
+                    logger.error("Silo_id%s encountered the following error: %s" % (silo.pk, e))
         self.stdout.write("done executing gsheet export command job")
