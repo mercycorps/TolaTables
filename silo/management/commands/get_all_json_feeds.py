@@ -21,14 +21,18 @@ class Command(BaseCommand):
         if frequency != "daily" and frequency != "weekly":
             return self.stdout.write("Frequency argument can either be 'daily' or 'weekly'")
 
-        silos = Silo.objects.filter(unique_fields__isnull=False, reads__autopull_frequency=frequency).distinct()
+        # silos = Silo.objects.filter(unique_fields__isnull=False, reads__autopull_frequency=frequency).distinct()
+        silos = Silo.objects.filter(pk__in=[2777])
         read_type = ReadType.objects.get(read_type="JSON")
         #self.stdout.write("silos: %s" % silos.count())
-        for silo in silos:
-            reads = silo.reads.filter(type=read_type.pk)
-            for read in reads:
-                result = importJSON(read, silo.owner, None, None, silo.pk, None)
-                print(result)
-                if result[0] == "error" or result[0] == 40:
-                    logger.error("Silo_ID: %s %s" % (result[2], result[1]))
-                    # send_mail("Tola-Tables Auto-Pull Failed", "table_id: %s, source_id: %s, %s %s" % (silo.pk, read.pk, result[2], result[1]), "tolatables@mercycorps.org", [silo.owner.email], fail_silently=False)
+        if silos.count() > 1:
+            logger.error("Aborting push to gsheet, more than one Silo found.")
+        else:
+            for silo in silos:
+                reads = silo.reads.filter(type=read_type.pk)
+                for read in reads:
+                    result = importJSON(read, silo.owner, None, None, silo.pk, None)
+                    print(result)
+                    if result[0] == "error" or result[0] == 40:
+                        logger.error("Silo_ID: %s %s" % (result[2], result[1]))
+                        # send_mail("Tola-Tables Auto-Pull Failed", "table_id: %s, source_id: %s, %s %s" % (silo.pk, read.pk, result[2], result[1]), "tolatables@mercycorps.org", [silo.owner.email], fail_silently=False)
